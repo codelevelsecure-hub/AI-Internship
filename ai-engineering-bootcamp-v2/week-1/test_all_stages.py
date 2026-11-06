@@ -117,7 +117,8 @@ def test_stage5(base: str) -> bool:
     ok = True
     ok &= check("status", status == 200, f"HTTP {status}")
     ok &= check("cost_usd", isinstance(full.get("cost_usd"), (int, float)) and full["cost_usd"] > 0, f"cost_usd={full.get('cost_usd')}")
-    ok &= check("all fields", set(full.keys()) == {"answer", "tokens_used", "model", "latency_ms", "cost_usd"}, f"keys={list(full.keys())}")
+    # Session 2 RAG adds retrieved_chunk_ids to the stage 5 (main.py) response.
+    ok &= check("all fields", set(full.keys()) == {"answer", "tokens_used", "model", "latency_ms", "cost_usd", "retrieved_chunk_ids"}, f"keys={list(full.keys())}")
     mini_cost = mini.get("cost_usd", 0)
     full_cost = full.get("cost_usd", 0)
     ok &= check("cost delta", full_cost > mini_cost, f"gpt-4o ${full_cost:.6f} > mini ${mini_cost:.6f}")
