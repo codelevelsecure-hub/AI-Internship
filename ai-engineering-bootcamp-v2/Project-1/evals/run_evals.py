@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from app import qa
+from app.agents import router
 from app.schemas import AskResponse
 
 GOLDEN = Path(__file__).resolve().parent / "golden.jsonl"
@@ -52,6 +53,7 @@ def check_answer(expect: dict[str, Any], response: AskResponse) -> list[tuple[st
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the golden set.")
     parser.add_argument("--model", default=None)
+    parser.add_argument("--mode", choices=["agent", "simple"], default="agent", help="agent = /ask, simple = /ask/simple")
     parser.add_argument("--only", default=None, help="Run one case by id")
     parser.add_argument("--show", action="store_true", help="Print each answer")
     args = parser.parse_args()
@@ -59,12 +61,16 @@ def main() -> int:
     cases = [c for c in load_golden() if not args.only or c["id"] == args.only]
     total_cost, passed_cases = 0.0, 0
     for case in cases:
-        response = qa.answer_question(case["question"], model=args.model)
+        if args.mode == "agent":
+            response = router.run_agent(case["question"], model=args.model)
+        else:
+            response = qa.answer_question(case["question"], model=args.model)
         total_cost += response.cost_usd
         checks = check_answer(case["expect"], response)
         ok = all(passed for _, passed, _ in checks)
         passed_cases += ok
-        print(f"{'PASS' if ok else 'FAIL'}  {case['id']}  (${response.cost_usd:.4f}, {response.latency_ms} ms)")
+        tools = f", tools: {[t.tool for t in response.tool_trace]}" if response.tool_trace else ""
+        print(f"{'PASS' if ok else 'FAIL'}  {case['id']}  (${response.cost_usd:.4f}, {response.latency_ms} ms{tools})")
         for name, passed, detail in checks:
             print(f"        {'ok ' if passed else 'XX '} {name}: {detail}")
         if args.show or not ok:

@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from app import crosswalk, gap_analysis, qa
 from app import evidence as find_evidence
+from app.agents import router
 from app.frameworks import load_framework
 from app.retrieval import EMBEDDING_MODEL, embedding_cost_usd, ingest_document, pinecone_health
 from app.schemas import AskRequest, AskResponse, GapReport, GapRequest, IngestRequest, IngestResponse
@@ -32,7 +33,23 @@ def _service_error(exc: Exception, action: str) -> HTTPException:
 #     -Body '{"question": "Who approves high-risk AI systems?"}'
 @app.post("/ask")
 def ask(body: AskRequest) -> AskResponse:
-    """Retrieve from both corpora, answer only from them, cite standard and organization passages separately."""
+    """Agent mode: the router picks tools (search, mapping, evidence, gap analysis, web search), then
+    answers only from what they returned, citing NIST and organization passages separately."""
+
+    question = body.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="'question' must not be empty.")
+    try:
+        return router.run_agent(question, model=body.model)
+    except qa.AnswerFailed as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise _service_error(exc, "Answer") from exc
+
+
+@app.post("/ask/simple")
+def ask_simple(body: AskRequest) -> AskResponse:
+    """Single-pass retrieval from both corpora (no tools): cheaper and faster, useful for comparison."""
 
     question = body.question.strip()
     if not question:

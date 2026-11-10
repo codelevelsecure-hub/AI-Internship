@@ -48,7 +48,7 @@ def _model_returns(monkeypatch, answer: ModelAnswer) -> None:
 
 
 def test_empty_question_is_rejected_before_any_call(no_network):
-    response = client.post("/ask", json={"question": "   "})
+    response = client.post("/ask/simple", json={"question": "   "})
     assert response.status_code == 400
     assert "must not be empty" in response.json()["detail"]
 
@@ -58,10 +58,11 @@ def test_ask_splits_citations_by_corpus_and_drops_invented_labels(monkeypatch, r
         answer="NIST expects incidents to be communicated [S1]. Acu requires committee approval [O1].",
         confidence=0.9, cited_labels=["S1", "S9"], gap_noted=False, refused=False,  # S9 was never shown
     ))
-    response = client.post("/ask", json={"question": "Who approves high-risk AI?", "model": "gpt-4o-mini"})
+    response = client.post("/ask/simple", json={"question": "Who approves high-risk AI?", "model": "gpt-4o-mini"})
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"answer", "tokens_used", "model", "latency_ms", "cost_usd", "retrieved_chunk_ids"}
+    assert set(body) == {"answer", "tokens_used", "model", "latency_ms", "cost_usd", "retrieved_chunk_ids", "mode", "tool_trace"}
+    assert body["mode"] == "simple" and body["tool_trace"] == []
     std, org = body["answer"]["standard_citations"], body["answer"]["org_citations"]
     assert [c["label"] for c in std] == ["S1"] and std[0]["subcategory_id"] == "MANAGE 4.3" and std[0]["page"] == 38
     assert [c["label"] for c in org] == ["O1"]  # picked up from the answer text although not in cited_labels
@@ -71,7 +72,7 @@ def test_ask_splits_citations_by_corpus_and_drops_invented_labels(monkeypatch, r
 
 def test_refusal_carries_no_citations(monkeypatch, retrieved):
     _model_returns(monkeypatch, ModelAnswer(answer=REFUSAL_ANSWER, confidence=0, cited_labels=["S1"], gap_noted=True, refused=True))
-    answer = client.post("/ask", json={"question": "What's the weather?"}).json()["answer"]
+    answer = client.post("/ask/simple", json={"question": "What's the weather?"}).json()["answer"]
     assert answer["refused"] and not answer["gap_noted"]
     assert answer["standard_citations"] == [] and answer["org_citations"] == []
 

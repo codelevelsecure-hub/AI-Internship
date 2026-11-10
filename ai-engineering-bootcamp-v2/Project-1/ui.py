@@ -66,8 +66,10 @@ with st.sidebar:
             show_error(status, body)
 
     st.header("Settings")
+    mode = st.radio("Ask mode", ["Agent (tools)", "Simple (one retrieval)"],
+                    help="Agent picks tools: search, mapping, evidence, gap analysis. Simple is one retrieval pass: faster, cheaper.")
     model = st.selectbox("Model", ["gpt-4o", "gpt-4o-mini"])
-    top_k = st.slider("Passages per corpus (top_k)", 1, 10, 5)
+    top_k = st.slider("Passages per corpus (Simple mode)", 1, 10, 5)
 
 st.title("AI Trust Navigator")
 st.caption("Compares the organization's AI governance documents with the NIST AI RMF 1.0. "
@@ -104,12 +106,16 @@ with ask_tab:
         asked = st.form_submit_button("Ask", type="primary")
 
     if asked:
-        with st.spinner("Retrieving from both corpora and generating an answer..."):
-            status, body = call_api("POST", "/ask", {"question": question, "model": model, "top_k": top_k})
+        path = "/ask" if mode.startswith("Agent") else "/ask/simple"
+        with st.spinner("Working on it (the agent may call several tools)..."):
+            status, body = call_api("POST", path, {"question": question, "model": model, "top_k": top_k})
         if status != 200 or not isinstance(body, dict):
             show_error(status, body)
         else:
             answer = body["answer"]
+            if answer.get("needs_live_search"):
+                st.info("This question needs live regulatory search, which is not enabled in v1. "
+                        "The answer covers only what the NIST AI RMF and the organization's documents contain.")
             if answer["refused"]:
                 st.warning(f"**Not covered by the documents**\n\n{answer['answer']}")
             elif answer["gap_noted"]:
@@ -128,6 +134,11 @@ with ask_tab:
             cols[1].metric("Tokens", body["tokens_used"])
             cols[2].metric("Cost (USD)", f"${body['cost_usd']:.4f}")
             cols[3].metric("Latency", f"{body['latency_ms']} ms")
+            if body.get("tool_trace"):
+                with st.expander(f"Tool trace ({len(body['tool_trace'])} calls)"):
+                    for t in body["tool_trace"]:
+                        args = ", ".join(f"{k}={v!r}" for k, v in t["arguments"].items() if v is not None)
+                        st.markdown(f"- step {t['step']}: `{t['tool']}({args})` → {t['summary']}")
             with st.expander("Raw JSON response"):
                 st.code(json.dumps(body, indent=2), language="json")
 

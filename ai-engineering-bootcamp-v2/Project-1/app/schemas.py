@@ -27,6 +27,12 @@ class Citation(BaseModel):
     quote: str  # Start of the cited passage, for display.
 
 
+class AgentAnswer(ModelAnswer):
+    """The agent's final structured answer (same fields as ModelAnswer, plus the live-search flag)."""
+
+    needs_live_search: bool  # True when the question needs recent information beyond the documents.
+
+
 class Answer(BaseModel):
     answer: str
     confidence: float = Field(ge=0.0, le=1.0)
@@ -34,6 +40,14 @@ class Answer(BaseModel):
     refused: bool
     standard_citations: list[Citation]
     org_citations: list[Citation]
+    needs_live_search: bool = False  # Set by the agent when only live web search could answer (v2).
+
+
+class ToolCallTrace(BaseModel):
+    step: int
+    tool: str
+    arguments: dict
+    summary: str  # Short description of what the tool returned.
 
 
 class AskRequest(BaseModel):
@@ -47,8 +61,10 @@ class AskResponse(BaseModel):
     tokens_used: int  # Chat tokens + question-embedding tokens.
     model: str
     latency_ms: int  # Retrieval + generation.
-    cost_usd: float  # Chat cost + embedding cost.
+    cost_usd: float  # Chat cost + embedding cost (+ gap-analysis cost when the agent ran it).
     retrieved_chunk_ids: list[str]  # Every chunk put in the prompt (standards first), best match first.
+    mode: Literal["agent", "simple"] = "simple"
+    tool_trace: list[ToolCallTrace] = Field(default_factory=list)  # Agent mode: the tools it used, in order.
 
 
 # ---------------------------------------------------------------- gap analysis
