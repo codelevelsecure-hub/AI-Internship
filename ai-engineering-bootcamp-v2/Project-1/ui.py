@@ -76,9 +76,10 @@ with st.sidebar:
             show_error(status, body)
 
     st.header("Settings")
-    mode = st.radio("Ask mode", ["Agent (tools)", "Simple (one retrieval)"],
+    # Defaults: Simple mode + gpt-4o-mini (~$0.0005 per question). Agent + gpt-4o is ~$0.01.
+    mode = st.radio("Ask mode", ["Agent (tools)", "Simple (one retrieval)"], index=1,
                     help="Agent picks tools: search, mapping, evidence, gap analysis. Simple is one retrieval pass: faster, cheaper.")
-    model = st.selectbox("Model", ["gpt-4o", "gpt-4o-mini"])
+    model = st.selectbox("Model", ["gpt-4o", "gpt-4o-mini"], index=1)
     top_k = st.slider("Passages per corpus (Simple mode)", 1, 10, 5)
 
 st.title("AI Trust Navigator")
