@@ -1,17 +1,27 @@
-"""Offline tests: no OpenAI or Pinecone calls. Run from the Project-1 folder with `pytest`."""
+"""Offline tests for /ask: no OpenAI or Pinecone calls. Run from the Project-1 folder with `pytest`."""
 
 import pytest
 from fastapi.testclient import TestClient
 
-import app.api as api
-from app.prompts import clean_citations
-from app.schemas import Answer
+import app.qa as qa
+from app.api import app
+from app.prompts import REFUSAL_ANSWER, clean_labels
+from app.schemas import ModelAnswer
+from app.search import Retrieved, named_subcategories
 
-client = TestClient(api.app)
+client = TestClient(app)
 
 
-def _match(doc_id: str, idx: int) -> dict:
-    return {"id": f"{doc_id}#{idx}", "score": 0.9, "text": "...", "metadata": {"document_id": doc_id, "source": f"{doc_id}.txt"}}
+def _std(label: str, sid: str, page: int) -> dict:
+    return {"id": f"nist-ai-rmf-100-1#{page}", "score": 0.8, "label": label, "corpus": "standard",
+            "text": f"NIST AI 100-1, page {page}\n{sid}: Incidents and errors are communicated.",
+            "metadata": {"document_id": "nist-ai-rmf-100-1", "title": "NIST AI 100-1", "subcategory_id": sid, "page": float(page)}}
+
+
+def _org(label: str, doc: str, section: str) -> dict:
+    return {"id": f"{doc}#0", "score": 0.7, "label": label, "corpus": "organization",
+            "text": f"Acu — Policy — {section}\nHigh-Risk AI requires AI Governance Committee approval.",
+            "metadata": {"document_id": doc, "title": "AI Governance Policy", "section": section}}
 
 
 @pytest.fixture
@@ -21,8 +31,20 @@ def no_network(monkeypatch):
     def boom(*_args, **_kwargs):
         raise AssertionError("network call attempted in an offline test")
 
-    monkeypatch.setattr(api, "query_similar", boom)
-    monkeypatch.setattr(api, "call_model_structured", boom)
+    monkeypatch.setattr(qa, "search_both", boom)
+    monkeypatch.setattr(qa, "call_model_structured", boom)
+
+
+@pytest.fixture
+def retrieved(monkeypatch):
+    result = Retrieved([_std("S1", "MANAGE 4.3", 38)], [_org("O1", "ai-governance-policy", "6. Minimum Deployment Requirements")],
+                       named_subcategories=[], embedding_tokens=7)
+    monkeypatch.setattr(qa, "search_both", lambda question, top_k: result)
+    return result
+
+
+def _model_returns(monkeypatch, answer: ModelAnswer) -> None:
+    monkeypatch.setattr(qa, "call_model_structured", lambda messages, model, schema: (answer, 100, 80, 20))
 
 
 def test_empty_question_is_rejected_before_any_call(no_network):
@@ -31,31 +53,32 @@ def test_empty_question_is_rejected_before_any_call(no_network):
     assert "must not be empty" in response.json()["detail"]
 
 
-def test_ask_response_shape_and_citation_guardrail(monkeypatch):
-    matches = [_match("ai-governance-policy", 0), _match("ai-risk-assessment", 2)]
-    monkeypatch.setattr(api, "query_similar", lambda q, top_k: (matches, 7))
-
-    model_answer = Answer(
-        answer="High-risk systems need committee approval [ai-governance-policy].",
-        confidence=0.9,
-        sources_needed=True,
-        citations=["ai-governance-policy#0", "invented-doc"],  # chunk id + a citation that was never retrieved
-        refused=False,
-    )
-    monkeypatch.setattr(api, "call_model_structured", lambda messages, model: (model_answer, 100, 80, 20))
-
+def test_ask_splits_citations_by_corpus_and_drops_invented_labels(monkeypatch, retrieved):
+    _model_returns(monkeypatch, ModelAnswer(
+        answer="NIST expects incidents to be communicated [S1]. Acu requires committee approval [O1].",
+        confidence=0.9, cited_labels=["S1", "S9"], gap_noted=False, refused=False,  # S9 was never shown
+    ))
     response = client.post("/ask", json={"question": "Who approves high-risk AI?", "model": "gpt-4o-mini"})
     assert response.status_code == 200
     body = response.json()
     assert set(body) == {"answer", "tokens_used", "model", "latency_ms", "cost_usd", "retrieved_chunk_ids"}
-    assert body["answer"]["citations"] == ["ai-governance-policy"]  # normalised, invented one dropped
-    assert body["tokens_used"] == 107  # chat + embedding tokens
-    assert body["model"] == "gpt-4o-mini"
-    assert body["retrieved_chunk_ids"] == ["ai-governance-policy#0", "ai-risk-assessment#2"]
-    assert body["cost_usd"] > 0
+    std, org = body["answer"]["standard_citations"], body["answer"]["org_citations"]
+    assert [c["label"] for c in std] == ["S1"] and std[0]["subcategory_id"] == "MANAGE 4.3" and std[0]["page"] == 38
+    assert [c["label"] for c in org] == ["O1"]  # picked up from the answer text although not in cited_labels
+    assert org[0]["section"] == "6. Minimum Deployment Requirements"
+    assert body["tokens_used"] == 107 and body["cost_usd"] > 0
 
 
-def test_clean_citations_normalises_dedupes_and_drops_unknown():
-    matches = [_match("ai-governance-policy", 0), _match("ai-risk-assessment", 1)]
-    raw = ["[ai-governance-policy#0]", "ai-governance-policy", "ai-risk-assessment#1, made-up#3", "nist-ai-rmf"]
-    assert clean_citations(raw, matches) == ["ai-governance-policy", "ai-risk-assessment"]
+def test_refusal_carries_no_citations(monkeypatch, retrieved):
+    _model_returns(monkeypatch, ModelAnswer(answer=REFUSAL_ANSWER, confidence=0, cited_labels=["S1"], gap_noted=True, refused=True))
+    answer = client.post("/ask", json={"question": "What's the weather?"}).json()["answer"]
+    assert answer["refused"] and not answer["gap_noted"]
+    assert answer["standard_citations"] == [] and answer["org_citations"] == []
+
+
+def test_clean_labels_normalises_dedupes_and_drops_unknown():
+    assert clean_labels(["[s1]", "S1", "O2, S3", "O9; S2"], {"S1", "S2", "O2"}) == ["S1", "O2", "S2"]
+
+
+def test_named_subcategories_finds_valid_ids_only():
+    assert named_subcategories("Does Acu meet measure 2.7 and MANAGE-2.1? Not GOVERN 9.9.") == ["MEASURE 2.7", "MANAGE 2.1"]

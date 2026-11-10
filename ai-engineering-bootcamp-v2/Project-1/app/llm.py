@@ -1,12 +1,13 @@
 """OpenAI chat calls and their cost."""
 
 from functools import lru_cache
+from typing import TypeVar
 
 from openai import OpenAI
-
-from app.schemas import Answer
+from pydantic import BaseModel
 
 DEFAULT_MODEL = "gpt-4o"
+T = TypeVar("T", bound=BaseModel)
 
 # Per-1K-token input/output USD (from OpenAI list prices).
 MODEL_PRICES_PER_1K: dict[str, tuple[float, float]] = {
@@ -30,14 +31,14 @@ def compute_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -> 
     return (prompt_tokens / 1000 * input_per_1k) + (completion_tokens / 1000 * output_per_1k)
 
 
-def call_model_structured(messages: list[dict[str, str]], model: str) -> tuple[Answer, int, int, int]:
+def call_model_structured(messages: list[dict[str, str]], model: str, schema: type[T]) -> tuple[T, int, int, int]:
     """
-    Structured output forces exactly the Answer schema.
-    Returns (parsed answer, total tokens, prompt tokens, completion tokens).
+    Structured output forces exactly the given Pydantic schema.
+    Returns (parsed object, total tokens, prompt tokens, completion tokens).
     Raises ValueError if the model returns nothing parseable.
     """
 
-    completion = _client().chat.completions.parse(model=model, messages=messages, response_format=Answer)
+    completion = _client().chat.completions.parse(model=model, messages=messages, response_format=schema)
 
     parsed = completion.choices[0].message.parsed
     if parsed is None:

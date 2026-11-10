@@ -1,0 +1,5 @@
+{"id": "q1-nist-risk-tolerance", "kind": "standard_only", "question": "What does the NIST AI RMF say about AI risk tolerance?", "expect": {"refused": false, "standard_subcategories_any": ["MAP 1.5", "GOVERN 1.3", "MEASURE 1.1", "MANAGE 1.3"], "min_standard_citations": 1}}
+{"id": "q2-acu-high-risk-approval", "kind": "organization_only", "question": "Who approves high-risk AI systems at Acu?", "expect": {"refused": false, "org_documents_any": ["ai-governance-policy"], "answer_contains_any": ["Governance Committee"]}}
+{"id": "q3-acu-manage-2-1", "kind": "both", "question": "How does Acu meet NIST AI RMF MANAGE 2.1?", "expect": {"refused": false, "standard_subcategories_any": ["MANAGE 2.1"], "org_documents_any": ["crosswalk", "ai-rmf-control-mapping", "ai-monitoring-incident-response-procedure"], "answer_contains_any": ["Incident Response"]}}
+{"id": "q4-acu-measure-2-7-gap", "kind": "gap", "question": "Does Acu address MEASURE 2.7?", "expect": {"refused": false, "gap_noted": true, "standard_subcategories_any": ["MEASURE 2.7"]}}
+{"id": "q5-off-topic", "kind": "refusal", "question": "What's the weather in Chicago today?", "expect": {"refused": true}}
