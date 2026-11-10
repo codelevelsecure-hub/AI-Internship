@@ -73,7 +73,28 @@ st.title("AI Trust Navigator")
 st.caption("Compares the organization's AI governance documents with the NIST AI RMF 1.0. "
            "Answers come only from the ingested documents.")
 
-ask_tab, ingest_tab = st.tabs(["Ask", "Ingest a document"])
+ask_tab, evidence_tab, ingest_tab = st.tabs(["Ask", "Evidence explorer", "Ingest a document"])
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_lists(api_url: str) -> tuple[list[dict], list[dict]] | None:
+    """Subcategories and controls for the pickers (cached per API URL for 5 minutes)."""
+
+    s_status, subs = call_api("GET", "/frameworks/nist-ai-rmf/subcategories")
+    c_status, ctrls = call_api("GET", "/controls")
+    if s_status != 200 or c_status != 200:
+        return None
+    return subs["subcategories"], ctrls["controls"]
+
+
+def show_evidence(items: list[dict]) -> None:
+    if not items:
+        st.info("No evidence passages found.")
+    for e in items:
+        label = f"{e['title']} — {e['section']}" + (f" ({e['date']})" if e.get("date") else "")
+        with st.expander(f"{label}  ·  score {e['score']:.2f}"):
+            st.write(e["quote"])
+            st.caption(f"chunk: {e['chunk_id']}" + (f" · system: {e['ai_system']}" if e.get("ai_system") else ""))
 
 # ---------------------------------------------------------------- ask
 with ask_tab:
@@ -108,6 +129,40 @@ with ask_tab:
             cols[3].metric("Latency", f"{body['latency_ms']} ms")
             with st.expander("Raw JSON response"):
                 st.code(json.dumps(body, indent=2), language="json")
+
+# ---------------------------------------------------------------- evidence
+with evidence_tab:
+    st.caption("Finds the organization's documents that bear on a NIST subcategory or on one of its controls. "
+               "No LLM call: these are retrieved passages, not a judgement.")
+    lists = load_lists(st.session_state.api_url)
+    if lists is None:
+        st.error("Could not load subcategories and controls. Check the API connection in the sidebar.")
+    else:
+        subcategories, controls = lists
+        mode = st.radio("Look up by", ["NIST subcategory", "Organization control"], horizontal=True)
+        if mode == "NIST subcategory":
+            options = {f"{s['id']} — {s['text'][:90]}" + (" ✓ mapped" if s["mapped_controls"] else ""): s["id"] for s in subcategories}
+            choice = st.selectbox("Subcategory", list(options))
+            params = {"subcategory": options[choice]}
+        else:
+            choice = st.selectbox("Control", [c["control_name"] for c in controls])
+            params = {"control": choice}
+        if st.button("Find evidence", type="primary"):
+            status, body = call_api("GET", "/evidence", params=params)
+            if status != 200 or not isinstance(body, dict):
+                show_error(status, body)
+            elif "subcategory" in body:
+                sub = body["subcategory"]
+                st.markdown(f"**{sub['id']}** ({sub['function']}, AI RMF 1.0 p. {sub['page']}): {sub['text']}")
+                if body["mapping_status"] == "mapped":
+                    st.success("Mapped to: " + ", ".join(body["mapped_controls"]))
+                else:
+                    st.warning("No organization control is mapped to this subcategory. "
+                               "Passages below are related by topic only.")
+                show_evidence(body["evidence"])
+            else:
+                st.markdown("**Mapped to:** " + ", ".join(f"{s['id']} — {s['text']}" for s in body["subcategories"]))
+                show_evidence(body["evidence"])
 
 # ---------------------------------------------------------------- ingest
 with ingest_tab:

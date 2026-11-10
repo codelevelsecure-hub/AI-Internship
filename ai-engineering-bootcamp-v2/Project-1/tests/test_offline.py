@@ -80,5 +80,32 @@ def test_clean_labels_normalises_dedupes_and_drops_unknown():
     assert clean_labels(["[s1]", "S1", "O2, S3", "O9; S2"], {"S1", "S2", "O2"}) == ["S1", "O2", "S2"]
 
 
+@pytest.fixture
+def fake_crosswalk(monkeypatch):
+    import app.crosswalk as cw
+
+    records = ({"subcategory_id": "GOVERN 1.1", "function": "Govern", "control_name": "AI Governance Policy", "source": "m.txt", "chunk_id": "crosswalk#0"},
+               {"subcategory_id": "MANAGE 2.1", "function": "Manage", "control_name": "AI Incident Response", "source": "m.txt", "chunk_id": "crosswalk#1"})
+    monkeypatch.setattr(cw, "load_records", lambda: records)
+
+
+def test_subcategories_and_controls_endpoints(fake_crosswalk):
+    subs = client.get("/frameworks/nist-ai-rmf/subcategories").json()
+    assert subs["count"] == 72
+    mapped = {s["id"]: s["mapped_controls"] for s in subs["subcategories"] if s["mapped_controls"]}
+    assert mapped == {"GOVERN 1.1": ["AI Governance Policy"], "MANAGE 2.1": ["AI Incident Response"]}
+    assert client.get("/frameworks/nist-ai-rmf/subcategories?function=govern").json()["count"] == 19
+    assert client.get("/frameworks/nist-ai-rmf/subcategories?function=nope").status_code == 400
+    controls = client.get("/controls").json()
+    assert controls["count"] == 2
+
+
+def test_evidence_validates_input_before_any_call(no_network, fake_crosswalk):
+    assert client.get("/evidence").status_code == 400
+    assert client.get("/evidence?subcategory=MAP%201.1&control=X").status_code == 400
+    assert client.get("/evidence?subcategory=GOVERN%209.9").status_code == 404
+    assert client.get("/evidence?control=Unknown").status_code == 404
+
+
 def test_named_subcategories_finds_valid_ids_only():
     assert named_subcategories("Does Acu meet measure 2.7 and MANAGE-2.1? Not GOVERN 9.9.") == ["MEASURE 2.7", "MANAGE 2.1"]

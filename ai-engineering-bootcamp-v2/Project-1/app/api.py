@@ -9,7 +9,9 @@ import time
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from app import qa
+from app import crosswalk, qa
+from app import evidence as find_evidence
+from app.frameworks import load_framework
 from app.retrieval import EMBEDDING_MODEL, embedding_cost_usd, ingest_document, pinecone_health
 from app.schemas import AskRequest, AskResponse, IngestRequest, IngestResponse
 from app.search import search_both
@@ -111,6 +113,56 @@ def debug_retrieve(q: str = "", top_k: int = Query(default=5, ge=1, le=20)) -> d
         "standards": [row(m) for m in retrieved.standards],
         "organization": [row(m) for m in retrieved.organization],
     }
+
+
+@app.get("/frameworks/nist-ai-rmf/subcategories")
+def list_subcategories(function: str | None = None) -> dict:
+    """The 72 NIST AI RMF 1.0 subcategories (optionally one function), each with its mapped controls."""
+
+    fw = load_framework()
+    if function and function.title() not in fw.functions:
+        raise HTTPException(status_code=400, detail=f"'function' must be one of {fw.functions}")
+    try:
+        mapped = {r["subcategory_id"]: [] for r in crosswalk.load_records()}
+        for r in crosswalk.load_records():
+            mapped[r["subcategory_id"]].append(r["control_name"])
+    except Exception as exc:
+        raise _service_error(exc, "Loading the control mapping") from exc
+    subs = [s for s in fw.subcategories if not function or s["function"] == function.title()]
+    return {
+        "framework": fw.name,
+        "version": fw.version,
+        "count": len(subs),
+        "subcategories": [{**s, "mapped_controls": mapped.get(s["id"], [])} for s in subs],
+    }
+
+
+@app.get("/controls")
+def list_controls() -> dict:
+    """The organization's controls from its control mapping, with the subcategories each one covers."""
+
+    try:
+        items = crosswalk.controls()
+    except Exception as exc:
+        raise _service_error(exc, "Loading the control mapping") from exc
+    return {"count": len(items), "controls": items}
+
+
+# Example: http://127.0.0.1:8001/evidence?subcategory=MANAGE%204.3  or  ?control=AI%20Incident%20Response
+@app.get("/evidence")
+def evidence(subcategory: str | None = None, control: str | None = None, top_k: int = Query(default=5, ge=1, le=10)) -> dict:
+    """Organization evidence (chunk-level quotes) for one NIST subcategory or one control. No LLM call."""
+
+    if bool(subcategory) == bool(control):
+        raise HTTPException(status_code=400, detail="Pass exactly one of 'subcategory' or 'control'.")
+    try:
+        if subcategory:
+            return find_evidence.evidence_for_subcategory(subcategory, top_k=top_k)
+        return find_evidence.evidence_for_control(control, top_k=top_k)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+    except Exception as exc:
+        raise _service_error(exc, "Evidence lookup") from exc
 
 
 @app.get("/health/pinecone")
