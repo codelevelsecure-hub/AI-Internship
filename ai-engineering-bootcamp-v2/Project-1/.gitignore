@@ -10,3 +10,10 @@ __pycache__/
 venv/
 .venv/
 env/
+
+# Internal (organization) corpus — confidential, never commit.
+# The public NIST PDFs in corpus/external/ stay in git.
+corpus/internal/
+
+# Generated at runtime (crosswalk records, gap-analysis cache)
+data/
