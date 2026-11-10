@@ -1,0 +1,128 @@
+AI Governance Policy
+
+## 1. Purpose
+
+Acu Financial Services is committed to the responsible use of Artificial Intelligence (AI) to improve customer service, operational efficiency, and business decision-making. This policy establishes governance requirements for all AI systems developed, purchased, or deployed by the organization.
+
+The objectives of this policy are to:
+
+* Promote responsible AI practices.
+* Reduce operational and regulatory risk.
+* Protect customer information.
+* Ensure appropriate human oversight.
+* Align organizational practices with the NIST AI Risk Management Framework.
+
+---
+
+## 2. Scope
+
+This policy applies to:
+
+* Employees
+* Contractors
+* Third-party AI services
+* Machine learning models
+* Generative AI applications
+* Vendor-provided AI solutions
+
+---
+
+## 3. AI Governance Principles
+
+Acu will ensure AI systems are:
+
+* Lawful
+* Fair
+* Transparent
+* Reliable
+* Secure
+* Privacy-preserving
+* Subject to human oversight
+
+---
+
+## 4. Roles
+
+### AI Governance Committee
+
+Responsible for:
+
+* Reviewing High-Risk AI systems
+* Approving production deployment
+* Reviewing AI incidents
+* Monitoring organizational AI risk
+
+### Business Owner
+
+Responsible for:
+
+* Business justification
+* Operational oversight
+* Accepting business risk
+
+### Information Security
+
+Responsible for:
+
+* Security reviews
+* Vulnerability assessments
+* Security monitoring
+
+### Data Governance
+
+Responsible for:
+
+* Data quality
+* Data classification
+* Privacy reviews
+
+---
+
+## 5. AI Risk Classification
+
+### Low Risk
+
+Examples:
+
+* Document summarization
+* Internal productivity assistants
+
+### Medium Risk
+
+Examples:
+
+* Customer support chatbot
+* Internal knowledge assistant
+
+### High Risk
+
+Examples:
+
+* Credit risk scoring
+* Fraud detection
+* Customer eligibility decisions
+
+---
+
+## 6. Minimum Deployment Requirements
+
+Every AI system must have:
+
+* AI Risk Assessment
+* Security Review
+* Business Owner Approval
+* AI Inventory Registration
+
+High-Risk AI additionally requires AI Governance Committee approval.
+
+---
+
+## 7. Monitoring
+
+Production AI systems shall be monitored for:
+
+* Accuracy
+* Reliability
+* Customer complaints
+* Security events
+* Performance degradation

@@ -1,0 +1,34 @@
+{
+  "_about": "One entry per internal (organization) file. Ingestion skips any .txt/.md file not listed here. Optional fields: date (YYYY-MM-DD), ai_system, stop_at (ignore the file from this line on).",
+  "organization": "Acu Financial Services",
+  "documents": {
+    "AI Governance Policy.txt": {
+      "document_id": "ai-governance-policy",
+      "doc_type": "policy"
+    },
+    "AI RMF Control Mapping.txt": {
+      "document_id": "ai-rmf-control-mapping",
+      "doc_type": "control_mapping"
+    },
+    "AI Governance Committee Meeting Minutes.txt": {
+      "document_id": "ai-governance-committee-minutes-2026-01-20",
+      "doc_type": "meeting_minutes",
+      "date": "2026-01-20",
+      "ai_system": "Customer Support Chatbot"
+    },
+    "AI Monitoring & Incident Response Procedure.txt": {
+      "document_id": "ai-monitoring-incident-response-procedure",
+      "doc_type": "procedure"
+    },
+    "AI Risk Assessment.txt": {
+      "document_id": "ai-risk-assessment-customer-support-chatbot",
+      "doc_type": "risk_assessment",
+      "ai_system": "Customer Support Chatbot"
+    },
+    "AI System Inventory.txt": {
+      "document_id": "ai-system-inventory",
+      "doc_type": "system_inventory",
+      "stop_at": "# Document 3"
+    }
+  }
+}

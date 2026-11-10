@@ -36,6 +36,10 @@ documents don't cover a question, it says so.
 
 ### Examples (from Acu Financial Services' sample documents, shortened)
 
+> **Acu Financial Services is a fictional company.** Its six governance documents were written for
+> this demo and are in [`samples/acu-financial-services/`](samples/acu-financial-services/). Any
+> resemblance to a real organization is coincidental.
+
 **"Who approves high-risk AI systems at Acu?"**
 > The AI Governance Committee approves high-risk AI systems before production. *(Cites: AI
 > Governance Policy, section 6, Minimum Deployment Requirements.)*
@@ -103,6 +107,15 @@ python create_pinecone_index.py
 ```
 
 ## Add the documents and ingest
+
+**Try the demo:** the NIST PDFs are already in `corpus/external/`. Copy the fictional Acu documents
+into the organization folder, then ingest:
+
+```powershell
+Copy-Item samples\acu-financial-services\* corpus\internal\
+```
+
+**Your own organization:**
 
 1. Put the NIST PDFs in `corpus/external/` and the organization's `.txt`/`.md` files in
    `corpus/internal/`.
@@ -216,4 +229,5 @@ app/retrieval.py         Pinecone + embeddings
 app/ingestion/           PDF reader, NIST splitter, internal splitter, Control Mapping parser
 ingest_docs.py           corpus -> Pinecone      create_pinecone_index.py  one-time index
 ui.py                    Streamlit UI            frameworks/  corpus/  evals/  tests/
+samples/acu-financial-services/   fictional demo organization (copy into corpus/internal/)
 ```

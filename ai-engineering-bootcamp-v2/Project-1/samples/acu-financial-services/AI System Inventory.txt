@@ -1,0 +1,152 @@
+AI System Inventory
+
+## System 1
+
+### Customer Support Chatbot
+
+Business Unit:
+Customer Service
+
+Purpose:
+Answer common customer banking questions using approved internal knowledge.
+
+Model Type:
+Large Language Model
+
+Users:
+Customers
+
+Risk Rating:
+Medium
+
+Data Used:
+
+* Product documentation
+* Public FAQs
+* Customer account metadata (read-only)
+
+Human Oversight:
+
+Complex conversations are transferred to a customer service representative.
+
+Current Status:
+Production
+
+---
+
+## System 2
+
+### Loan Risk Scoring Model
+
+Business Unit:
+Consumer Lending
+
+Purpose:
+Provide loan officers with a credit risk recommendation.
+
+Model Type:
+Machine Learning
+
+Risk Rating:
+High
+
+Decision Maker:
+Human loan officer
+
+Current Status:
+Production
+
+---
+
+## System 3
+
+### Invoice Processing Assistant
+
+Business Unit:
+Finance
+
+Purpose:
+Extract invoice information from uploaded documents.
+
+Risk Rating:
+Low
+
+Current Status:
+Pilot
+
+---
+
+# Document 3 – AI Risk Assessment
+
+## AI System
+
+Customer Support Chatbot
+
+---
+
+## Business Purpose
+
+Reduce customer wait times while improving consistency of responses.
+
+---
+
+## Identified Risks
+
+### Risk 1
+
+Hallucinated responses.
+
+Potential Impact:
+
+Customers receive inaccurate financial information.
+
+Mitigation:
+
+* Approved knowledge base
+* Human escalation
+* Response monitoring
+
+Residual Risk:
+Medium
+
+---
+
+### Risk 2
+
+Disclosure of sensitive information.
+
+Mitigation:
+
+* Role-based access
+* Data masking
+* Logging
+
+Residual Risk:
+Low
+
+---
+
+### Risk 3
+
+Prompt Injection
+
+Mitigation:
+
+* Prompt validation
+* Input filtering
+* Security monitoring
+
+Residual Risk:
+Medium
+
+---
+
+## Human Oversight
+
+Customer service representatives review escalated interactions and investigate customer complaints.
+
+---
+
+## Review Schedule
+
+Risk assessment reviewed annually or following significant system changes.

@@ -1,0 +1,74 @@
+AI Risk Assessment
+
+## AI System
+
+Customer Support Chatbot
+
+---
+
+## Business Purpose
+
+Reduce customer wait times while improving consistency of responses.
+
+---
+
+## Identified Risks
+
+### Risk 1
+
+Hallucinated responses.
+
+Potential Impact:
+
+Customers receive inaccurate financial information.
+
+Mitigation:
+
+* Approved knowledge base
+* Human escalation
+* Response monitoring
+
+Residual Risk:
+Medium
+
+---
+
+### Risk 2
+
+Disclosure of sensitive information.
+
+Mitigation:
+
+* Role-based access
+* Data masking
+* Logging
+
+Residual Risk:
+Low
+
+---
+
+### Risk 3
+
+Prompt Injection
+
+Mitigation:
+
+* Prompt validation
+* Input filtering
+* Security monitoring
+
+Residual Risk:
+Medium
+
+---
+
+## Human Oversight
+
+Customer service representatives review escalated interactions and investigate customer complaints.
+
+---
+
+## Review Schedule
+
+Risk assessment reviewed annually or following significant system changes.

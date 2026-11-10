@@ -1,0 +1,41 @@
+AI RMF Control Mapping
+
+## Governance Mapping
+
+| NIST AI RMF | Acu Control            |
+| ----------- | ----------------------- |
+| GOVERN 1.1  | AI Governance Policy    |
+| GOVERN 2.2  | AI Governance Committee |
+| GOVERN 4.1  | Annual Policy Review    |
+
+---
+
+## Mapping Function
+
+| NIST AI RMF | Acu Control               |
+| ----------- | -------------------------- |
+| MAP 1.1     | AI Inventory               |
+| MAP 2.2     | AI Risk Assessment         |
+| MAP 3.1     | Data Classification Review |
+
+---
+
+## Measure Function
+
+| NIST AI RMF | Acu Control            |
+| ----------- | ----------------------- |
+| MEASURE 2.1 | Model Testing Procedure |
+| MEASURE 2.3 | Monthly Monitoring      |
+
+---
+
+## Manage Function
+
+| NIST AI RMF | Acu Control            |
+| ----------- | ----------------------- |
+| MANAGE 1.1  | AI Monitoring Procedure |
+| MANAGE 2.1  | AI Incident Response    |
+
+Summary:
+
+Each deployed AI system is mapped to applicable NIST AI RMF outcomes. Supporting evidence is maintained by the Risk Management Office.

@@ -1,0 +1,43 @@
+AI Governance Committee Meeting Minutes
+
+Meeting Date:
+January 20, 2026
+
+Purpose:
+Review production deployment of the Customer Support Chatbot.
+
+Attendees:
+
+* Chief Risk Officer
+* Director of Information Security
+* Customer Service Director
+* Data Governance Manager
+
+Agenda
+
+1. Review AI Risk Assessment.
+2. Review Security Assessment.
+3. Review Privacy Review.
+4. Discuss monitoring approach.
+5. Vote on production approval.
+
+Discussion Summary
+
+Committee members agreed the chatbot provides operational value while maintaining acceptable residual risk through human escalation, monitoring, and restricted access to customer information.
+
+Decision
+
+Approved for Production
+
+Conditions
+
+* Weekly monitoring reports
+* Quarterly governance review
+* Annual AI Risk Assessment update
+* Immediate reporting of significant AI incidents
+
+Action Items
+
+* Register production deployment.
+* Schedule first quarterly review.
+* Deliver monitoring dashboard to committee.

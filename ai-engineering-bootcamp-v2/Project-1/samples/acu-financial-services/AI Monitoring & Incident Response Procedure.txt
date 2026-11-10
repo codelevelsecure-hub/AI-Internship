@@ -1,0 +1,71 @@
+AI Monitoring & Incident Response Procedure
+
+## Purpose
+
+Provide a consistent process for monitoring production AI systems and responding to incidents.
+
+---
+
+## Monitoring Activities
+
+Weekly
+
+* Review response quality
+* Review customer complaints
+* Verify system availability
+
+Monthly
+
+* Review model performance
+* Review security logs
+* Review operational metrics
+
+Quarterly
+
+* Governance Committee review
+* Risk assessment validation
+
+---
+
+## Incident Categories
+
+### Low
+
+Minor quality issue with minimal customer impact.
+
+### Medium
+
+Repeated inaccurate responses affecting multiple customers.
+
+### High
+
+Security breach, privacy incident, or widespread incorrect recommendations.
+
+---
+
+## Response Process
+
+1. Log the incident.
+2. Notify the AI System Owner.
+3. Assess severity.
+4. Implement corrective actions.
+5. Validate system performance.
+6. Document root cause.
+7. Present significant incidents to the AI Governance Committee.
+
+---
+
+## Escalation Criteria
+
+Immediate escalation is required when:
+
+* Customer data is exposed.
+* The AI system produces harmful or misleading financial guidance.
+* Security controls fail.
+* Regulatory obligations may be affected.
+
+---
+
+## Continuous Improvement
+
+Lessons learned from incidents will be incorporated into future risk assessments, governance reviews, and system improvements.
