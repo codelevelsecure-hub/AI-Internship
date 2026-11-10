@@ -1,0 +1,189 @@
+{
+  "schema_version": "1.0",
+  "name": "AI Trust Navigator",
+  "version": "1.0.0",
+  "summary": "AI governance assistant that compares one organization's AI governance documents with the NIST AI Risk Management Framework (AI RMF 1.0): answers compliance questions with citations to both, finds evidence, rates every NIST subcategory Covered/Partial/Missing, and recommends next steps from the NIST Playbook.",
+  "scope": {
+    "frameworks": [
+      {
+        "id": "nist-ai-rmf-1.0",
+        "name": "NIST AI Risk Management Framework 1.0",
+        "functions": ["Govern", "Map", "Measure", "Manage"],
+        "categories": 19,
+        "subcategories": 72,
+        "subcategory_id_format": "<FUNCTION> <category>.<n>, e.g. 'GOVERN 1.1', 'MEASURE 2.7' (case-insensitive on input)",
+        "source_of_truth": "frameworks/nist_ai_rmf_1.0.json"
+      }
+    ],
+    "organizations": 1,
+    "knowledge_sources": [
+      {"corpus": "standard", "documents": ["NIST AI 100-1 (AI RMF 1.0)", "NIST AI RMF Playbook"], "folder": "corpus/external/"},
+      {"corpus": "organization", "document_types": ["policy", "procedure", "meeting_minutes", "risk_assessment", "system_inventory", "control_mapping"], "folder": "corpus/internal/"}
+    ],
+    "grounding": "Answers use only ingested documents. Passages are labelled S<n> (standard) and O<n> (organization); only labels actually retrieved become citations. A control mapping is treated as a claim to check, not as evidence."
+  },
+  "api": {
+    "base_url_local": "http://127.0.0.1:8001",
+    "openapi_spec": "/openapi.json",
+    "authentication": {
+      "type": "api_key",
+      "header": "X-API-Key",
+      "required_when": "the server has the API_KEY environment variable set",
+      "open_paths": ["/health/pinecone", "/docs", "/redoc", "/openapi.json"],
+      "error": {"status": 401, "detail": "Missing or invalid X-API-Key header."}
+    },
+    "errors": {
+      "400": "Invalid input (empty question, unknown subcategory in /gaps, both or neither of subcategory/control)",
+      "404": "Unknown subcategory or control (/evidence), or no gap report yet (/gaps/latest)",
+      "422": "Request body does not match the schema",
+      "502": "OpenAI or Pinecone call failed, or the model output failed validation twice",
+      "503": "Server not configured (missing environment variables)"
+    }
+  },
+  "capabilities": [
+    {
+      "id": "answer_question",
+      "description": "Answer a compliance question. An agent picks tools (search NIST, search organization documents, control mapping, evidence, gap analysis, web search), then answers with citations to both corpora.",
+      "method": "POST",
+      "path": "/ask",
+      "input": {
+        "question": {"type": "string", "required": true},
+        "model": {"type": "string", "required": false, "default": "gpt-4o (ROUTER_MODEL)"}
+      },
+      "output": {
+        "answer.answer": "string, with inline [S1]/[O2] markers",
+        "answer.standard_citations": "list of {label, document_id, title, subcategory_id, page, quote, chunk_id}",
+        "answer.org_citations": "list of {label, document_id, title, section, quote, chunk_id}",
+        "answer.gap_noted": "boolean: NIST expects something the organization's documents don't show",
+        "answer.refused": "boolean: question not covered by either corpus",
+        "answer.needs_live_search": "boolean: only live web search could answer (not enabled in v1)",
+        "answer.confidence": "number 0-1",
+        "tool_trace": "list of {step, tool, arguments, summary}",
+        "mode": "'agent'",
+        "tokens_used": "integer", "cost_usd": "number", "latency_ms": "integer", "model": "string"
+      },
+      "typical_cost_usd": 0.01,
+      "llm_calls": "1-6 (at most 5 tool rounds)"
+    },
+    {
+      "id": "answer_question_simple",
+      "description": "Answer a compliance question with one retrieval pass over both corpora, no tools. Cheaper and faster than /ask; same answer shape (mode 'simple', empty tool_trace, needs_live_search always false).",
+      "method": "POST",
+      "path": "/ask/simple",
+      "input": {
+        "question": {"type": "string", "required": true},
+        "model": {"type": "string", "required": false, "default": "gpt-4o"},
+        "top_k": {"type": "integer", "required": false, "default": 5, "min": 1, "max": 20, "meaning": "passages retrieved from each corpus"}
+      },
+      "output": "same as answer_question",
+      "typical_cost_usd": 0.0005,
+      "llm_calls": "1 (2 if the first output fails validation)"
+    },
+    {
+      "id": "run_gap_analysis",
+      "description": "Rate NIST subcategories Covered / Partial / Missing / Not applicable against the organization's documents, with rationale, mapping assessment, cited evidence and Playbook-grounded recommendations. Results are cached per subcategory; unchanged ones cost nothing.",
+      "method": "POST",
+      "path": "/gaps",
+      "input": {
+        "function": {"type": "string", "required": false, "enum": ["Govern", "Map", "Measure", "Manage"], "meaning": "omit (with subcategory_ids) for all 72"},
+        "subcategory_ids": {"type": "array of string", "required": false, "meaning": "explicit list; overrides function"},
+        "model": {"type": "string", "required": false, "default": "gpt-4o-mini (GAP_MODEL)"},
+        "refresh": {"type": "boolean", "required": false, "default": false, "meaning": "ignore the cache and re-assess"}
+      },
+      "output": {
+        "counts": "{Covered, Partial, Missing, Not applicable}",
+        "counts_by_function": "{<function>: counts}",
+        "findings": "list of {subcategory_id, function, category_id, statement, page, mapped_controls, status, rationale, mapping_assessment, evidence[{label, document_id, title, section, date, quote, chunk_id}], recommendations[{action, priority High|Medium|Low, owner_hint, playbook_refs[{label, page, chunk_id}]}], confidence, cached, cost_usd}",
+        "cached_findings": "integer", "cost_usd": "number", "latency_ms": "integer", "scope": "string", "model": "string", "generated_at": "ISO 8601"
+      },
+      "typical_cost_usd": {"all_72_uncached": 0.03, "all_72_cached": 0.0001},
+      "typical_latency_s": {"all_72_uncached": 60, "all_72_cached": 4}
+    },
+    {
+      "id": "latest_gap_report",
+      "description": "The most recent assessment of every subcategory assessed so far, read from the cache. No model calls.",
+      "method": "GET",
+      "path": "/gaps/latest",
+      "input": {},
+      "output": "same shape as run_gap_analysis (cost_usd 0)",
+      "typical_cost_usd": 0
+    },
+    {
+      "id": "find_evidence",
+      "description": "Organization passages that bear on ONE NIST subcategory or ONE control (at most 2 per document). Retrieval only, no judgement, no LLM call.",
+      "method": "GET",
+      "path": "/evidence",
+      "input": {
+        "subcategory": {"type": "string", "required": "exactly one of subcategory or control", "example": "MANAGE 4.3"},
+        "control": {"type": "string", "required": "exactly one of subcategory or control", "example": "AI Incident Response"},
+        "top_k": {"type": "integer", "required": false, "default": 5, "min": 1, "max": 10}
+      },
+      "output": {
+        "subcategory": "{id, function, category_id, text, page} (subcategory lookups)",
+        "mapping_status": "'mapped' | 'unmapped' (subcategory lookups)",
+        "mapped_controls": "list of string",
+        "evidence_basis": "how the passages were found",
+        "evidence": "list of {document_id, title, doc_type, section, date, ai_system, quote, score, chunk_id}",
+        "cost_usd": "number (embedding only)"
+      },
+      "typical_cost_usd": 0.000002
+    },
+    {
+      "id": "list_controls",
+      "description": "The organization's controls from its control mapping, each with the subcategories it is mapped to.",
+      "method": "GET",
+      "path": "/controls",
+      "input": {},
+      "output": {"count": "integer", "controls": "list of {control_name, subcategory_ids}"},
+      "typical_cost_usd": 0
+    },
+    {
+      "id": "list_subcategories",
+      "description": "The 72 NIST AI RMF 1.0 subcategories (optionally one function), each with its mapped organization controls.",
+      "method": "GET",
+      "path": "/frameworks/nist-ai-rmf/subcategories",
+      "input": {"function": {"type": "string", "required": false, "enum": ["Govern", "Map", "Measure", "Manage"]}},
+      "output": {"count": "integer", "subcategories": "list of {id, function, category_id, text, page, mapped_controls}"},
+      "typical_cost_usd": 0
+    },
+    {
+      "id": "add_document",
+      "description": "Add or replace one ad-hoc organization document (plain text). Re-posting the same document_id replaces it. The full corpus is ingested with ingest_docs.py instead.",
+      "method": "POST",
+      "path": "/ingest",
+      "input": {
+        "document_id": {"type": "string", "required": true, "constraints": "ASCII, at most 200 characters"},
+        "text": {"type": "string", "required": true},
+        "source": {"type": "string", "required": false},
+        "metadata": {"type": "object", "required": false, "values": "string, number, boolean or list of strings"}
+      },
+      "output": {"document_id": "string", "chunks_indexed": "integer", "status": "'indexed'"},
+      "typical_cost_usd": 0.00001
+    },
+    {
+      "id": "debug_retrieval",
+      "description": "Show which labelled passages each corpus returns for a query, with scores. No LLM call.",
+      "method": "GET",
+      "path": "/debug/retrieve",
+      "input": {"q": {"type": "string", "required": true}, "top_k": {"type": "integer", "required": false, "default": 5, "min": 1, "max": 20}},
+      "output": {"standards": "list of passages", "organization": "list of passages", "named_subcategories": "list of string"},
+      "typical_cost_usd": 0.000002
+    },
+    {
+      "id": "health",
+      "description": "Pinecone reachable, index dimension correct, chunk counts per namespace, and whether API-key auth is on. No authentication needed.",
+      "method": "GET",
+      "path": "/health/pinecone",
+      "input": {},
+      "output": {"ok": "boolean", "namespaces": "{standards: {name, vector_count}, organization: {name, vector_count}}", "auth_enabled": "boolean"},
+      "typical_cost_usd": 0
+    }
+  ],
+  "not_in_v1": [
+    "Live web search and monitoring of new AI regulations or guidance (the agent's web_search tool returns 'not enabled in v1' and sets needs_live_search)",
+    "More than one organization",
+    "Frameworks other than NIST AI RMF 1.0",
+    "Legal advice or compliance certification: gap ratings are an assistant's judgement for human review"
+  ],
+  "planned_v2": ["Enable web_search for regulation and guidance monitoring", "Additional frameworks", "Multiple organizations"]
+}

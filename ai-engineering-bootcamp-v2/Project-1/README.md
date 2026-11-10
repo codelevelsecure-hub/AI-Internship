@@ -8,6 +8,65 @@ recommends next steps grounded in the NIST Playbook.
 v1 covers one organization and one framework. Live monitoring of new regulations (web search) is
 built in as a disabled tool and switches on in v2.
 
+A structured description of every capability, for tools and AI agents, is in
+[`capabilities.json`](capabilities.json).
+
+## What it does for you
+
+AI Trust Navigator reads two sets of documents side by side:
+
+- **The standard:** the NIST AI RMF 1.0 and its Playbook, which describe what good AI risk
+  management looks like (72 outcomes, called subcategories, in four functions: Govern, Map, Measure,
+  Manage).
+- **Your organization:** your AI policy, procedures, committee minutes, risk assessments, system
+  inventory, and the control mapping that says which of your controls meet which NIST outcome.
+
+It then does five things:
+
+| You want to… | What it does | Where |
+|---|---|---|
+| Ask a compliance question | Answers in plain language, citing the NIST passage and your document separately | **Ask** tab |
+| Know where you fall short | Rates every NIST subcategory Covered, Partial or Missing, explains why, and recommends next steps | **Gap analysis** tab |
+| Prove a control works | Shows the passages in your documents that support a subcategory or control | **Evidence explorer** tab |
+| Check your control mapping | Flags controls that are mapped but not documented, or mapped to the wrong outcome | Gap analysis and Ask |
+| Track new regulations | Not in v1: it says so instead of guessing (v2 adds live search) | Ask |
+
+It answers only from these documents. Every claim carries a citation you can open, and if the
+documents don't cover a question, it says so.
+
+### Examples (from Acu Financial Services' sample documents, shortened)
+
+**"Who approves high-risk AI systems at Acu?"**
+> The AI Governance Committee approves high-risk AI systems before production. *(Cites: AI
+> Governance Policy, section 6, Minimum Deployment Requirements.)*
+
+**"Does Acu address MEASURE 2.7?"** (AI system security and resilience)
+> **Gap noted.** NIST recommends that AI security and resilience are evaluated and documented. No Acu
+> control is mapped to MEASURE 2.7. Acu monitors security events and reviews security logs monthly,
+> but there is no formal evaluation of AI security and resilience. *(Cites: AI RMF 1.0 p. 35; AI
+> Governance Policy section 7; Monitoring & Incident Response Procedure.)*
+
+**"How does Acu meet MANAGE 2.1?"** (resources and non-AI alternatives)
+> **Gap noted.** Acu maps MANAGE 2.1 to its "AI Incident Response" control, but that control is about
+> responding to incidents, not about resourcing risk management or considering non-AI alternatives,
+> so the mapping looks weak.
+
+**"What are the latest EU AI Act updates we should prepare for?"**
+> Live regulatory search is not enabled in v1, so the app does not guess. It answers any part the
+> documents cover.
+
+**Gap analysis of all 72 subcategories** (about a minute, about $0.03):
+> 2 Covered, 36 Partial, 34 Missing. Three mapped controls (Model Testing Procedure, Data
+> Classification Review, Annual Policy Review) have no supporting document.
+
+### What it does not do (v1)
+
+- It does not give legal advice or certify compliance. The NIST AI RMF is voluntary guidance, and
+  the gap ratings are an assistant's judgement for a person to review.
+- It knows only the documents you ingest. It does not see your systems, logs or live data.
+- It covers one organization and one framework (NIST AI RMF 1.0).
+- It does not search the web or track new regulations yet.
+
 ## How it works
 
 ```
@@ -145,6 +204,7 @@ deploy or restart; the first `/gaps` run rebuilds it (~$0.03).
 ## Project layout
 
 ```
+capabilities.json        machine-readable description of every capability (kept in sync by a test)
 main.py                  entry point (uvicorn main:app)
 app/api.py               routes            app/auth.py        X-API-Key check
 app/qa.py                /ask/simple flow  app/agents/        router + tools (/ask)
