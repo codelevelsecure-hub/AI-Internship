@@ -24,8 +24,10 @@ st.set_page_config(page_title="AI Trust Navigator", layout="wide")
 def call_api(method: str, path: str, payload: dict | None = None, params: dict | None = None) -> tuple[int | None, dict | list | str]:
     """Return (status_code, json-or-text). status_code is None if the API couldn't be reached."""
 
+    headers = {"X-API-Key": st.session_state.api_key} if st.session_state.get("api_key") else {}
     try:
-        r = httpx.request(method, f"{st.session_state.api_url.rstrip('/')}{path}", json=payload, params=params, timeout=TIMEOUT_S)
+        r = httpx.request(method, f"{st.session_state.api_url.rstrip('/')}{path}", json=payload, params=params,
+                          headers=headers, timeout=TIMEOUT_S)
     except httpx.HTTPError as exc:
         return None, f"Could not reach {st.session_state.api_url}: {exc}"
     try:
@@ -55,6 +57,8 @@ def show_citations(title: str, citations: list[dict]) -> None:
 with st.sidebar:
     st.header("API")
     st.session_state.api_url = st.text_input("API base URL", DEFAULT_API_URL, help="Set ATN_API_URL to change the default.")
+    st.session_state.api_key = st.text_input("API key", os.getenv("ATN_API_KEY", ""), type="password",
+                                             help="Sent as X-API-Key. Needed when the API has API_KEY set. Set ATN_API_KEY to prefill.")
     if st.button("Check connection"):
         with st.spinner("Calling /health/pinecone (first call may wake the server)..."):
             status, body = call_api("GET", "/health/pinecone")
@@ -62,6 +66,12 @@ with st.sidebar:
             ns = body["namespaces"]
             st.success(f"Connected — standards: {ns['standards']['vector_count']} chunks, "
                        f"organization: {ns['organization']['vector_count']} chunks")
+            if not body.get("auth_enabled"):
+                st.warning("This API has no API_KEY set: anyone who can reach it can use it.")
+            else:
+                key_status, _ = call_api("GET", "/controls")
+                if key_status == 401:
+                    st.error("The API requires a key: enter the correct API key above.")
         else:
             show_error(status, body)
 

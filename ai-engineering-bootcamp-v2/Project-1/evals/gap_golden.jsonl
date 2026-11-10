@@ -1,0 +1,10 @@
+{"subcategory_id": "MEASURE 2.1", "accept": ["Missing"], "why": "Mapped to 'Model Testing Procedure', but no such document exists in the corpus.", "reviewed": false}
+{"subcategory_id": "MEASURE 2.11", "accept": ["Missing"], "why": "No fairness or bias evaluation documented, although the Loan Risk Scoring Model is high-risk.", "reviewed": false}
+{"subcategory_id": "MAP 1.5", "accept": ["Missing"], "why": "No documented organizational risk tolerance.", "reviewed": false}
+{"subcategory_id": "GOVERN 2.2", "accept": ["Missing"], "why": "Mapped to the AI Governance Committee, but no AI risk training is documented.", "reviewed": false}
+{"subcategory_id": "GOVERN 6.1", "accept": ["Missing", "Partial"], "why": "Policy scope names third-party AI services, but no third-party risk policy or procedure exists.", "reviewed": false}
+{"subcategory_id": "MANAGE 2.1", "accept": ["Partial", "Missing"], "why": "Mapped to 'AI Incident Response', which does not address resourcing or non-AI alternatives.", "reviewed": false}
+{"subcategory_id": "MANAGE 4.3", "accept": ["Partial", "Covered"], "why": "Procedure logs incidents, notifies the owner, documents root cause and reports to the committee; no communication to affected communities.", "reviewed": false}
+{"subcategory_id": "GOVERN 1.6", "accept": ["Partial", "Covered"], "why": "An AI System Inventory exists and the policy requires registration; resourcing by risk priority is not documented.", "reviewed": false}
+{"subcategory_id": "MAP 1.1", "accept": ["Partial", "Covered"], "why": "Inventory and risk assessment document purpose, users and data for each system; context-specific laws are not documented.", "reviewed": false}
+{"subcategory_id": "GOVERN 1.1", "accept": ["Partial"], "why": "Policy states AI must be lawful and aligned with NIST, but specific legal and regulatory requirements are not documented.", "reviewed": false}

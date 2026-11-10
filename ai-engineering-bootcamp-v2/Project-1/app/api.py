@@ -9,7 +9,7 @@ import time
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from app import crosswalk, gap_analysis, qa
+from app import auth, crosswalk, gap_analysis, qa
 from app import evidence as find_evidence
 from app.agents import router
 from app.frameworks import load_framework
@@ -18,6 +18,7 @@ from app.schemas import AskRequest, AskResponse, GapReport, GapRequest, IngestRe
 from app.search import search_both
 
 app = FastAPI(title="AI Trust Navigator")
+app.middleware("http")(auth.require_api_key)  # X-API-Key on every route except health and docs
 
 
 def _service_error(exc: Exception, action: str) -> HTTPException:
@@ -214,5 +215,5 @@ def gaps_latest() -> GapReport:
 def health_pinecone() -> JSONResponse:
     """Debug check: Pinecone reachable, index dimension matches, vectors in both namespaces. 503 if not."""
 
-    report = pinecone_health()
+    report = {**pinecone_health(), "auth_enabled": auth.auth_enabled()}
     return JSONResponse(report, status_code=200 if report["ok"] else 503)
