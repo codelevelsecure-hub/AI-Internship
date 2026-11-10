@@ -1,9 +1,12 @@
 """Pinecone vector store + OpenAI embeddings.
 
-All config comes from environment variables (see .env.example), loaded by the
-app package. Nothing here talks to Pinecone or OpenAI at import time, so the app
-still starts if Pinecone isn't configured yet; /health/pinecone tells you what's
-missing.
+Two namespaces in one index keep the corpora apart:
+  - standards namespace: NIST AI RMF 100-1 and Playbook chunks (external, shared by every organization)
+  - organization namespace: the organization's own documents and its control-mapping records (internal)
+
+All config comes from environment variables (see .env.example), loaded by the app package. Nothing
+here talks to Pinecone or OpenAI at import time, so the app still starts if Pinecone isn't configured
+yet; /health/pinecone tells you what's missing.
 
 Quick check from the Project-1 folder:  python -m app.retrieval
 """
@@ -24,19 +27,23 @@ EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIM = 1536  # Your Pinecone index must be created with this dimension.
 EMBEDDING_PRICE_PER_1K = 0.00002  # USD, text-embedding-3-small list price ($0.02 / 1M tokens).
 
-# Chunking defaults (characters, not tokens). Override with CHUNK_SIZE / CHUNK_OVERLAP.
+# Chunking defaults for /ingest (characters, not tokens). Override with CHUNK_SIZE / CHUNK_OVERLAP.
 DEFAULT_CHUNK_SIZE = 800
 DEFAULT_CHUNK_OVERLAP = 100
 
 BATCH_SIZE = 100  # Chunks per OpenAI embeddings call and per Pinecone upsert request.
 DELETE_BATCH_SIZE = 1000  # Pinecone's max ids per delete call.
 
+DEFAULT_STANDARDS_NAMESPACE = "project-1-standards"
+DEFAULT_ORG_NAMESPACE = "project-1-org-default"
+
 
 @dataclass(frozen=True)
 class PineconeSettings:
     api_key: str
     index_name: str
-    namespace: str
+    standards_namespace: str
+    org_namespace: str
 
 
 def get_settings() -> PineconeSettings:
@@ -47,8 +54,11 @@ def get_settings() -> PineconeSettings:
     missing = [name for name, value in (("PINECONE_API_KEY", api_key), ("PINECONE_INDEX_NAME", index_name)) if not value]
     if missing:
         raise RuntimeError(f"Missing required env var(s): {', '.join(missing)}")
-    namespace = os.getenv("PINECONE_NAMESPACE", "default").strip() or "default"
-    return PineconeSettings(api_key=api_key, index_name=index_name, namespace=namespace)
+    standards = os.getenv("PINECONE_NAMESPACE_STANDARDS", "").strip() or DEFAULT_STANDARDS_NAMESPACE
+    org = os.getenv("PINECONE_NAMESPACE_ORG", "").strip() or DEFAULT_ORG_NAMESPACE
+    if standards == org:
+        raise RuntimeError("PINECONE_NAMESPACE_STANDARDS and PINECONE_NAMESPACE_ORG must differ")
+    return PineconeSettings(api_key=api_key, index_name=index_name, standards_namespace=standards, org_namespace=org)
 
 
 def _env_int(name: str, default: int) -> int:
@@ -89,7 +99,7 @@ def embedding_cost_usd(tokens: int) -> float:
 
 
 def split_text(text: str) -> list[str]:
-    """Split on paragraphs, then lines, then words, so chunks break at natural boundaries."""
+    """Generic splitter for /ingest: paragraphs, then lines, then words."""
 
     size, overlap = chunk_settings()
     splitter = RecursiveCharacterTextSplitter(chunk_size=size, chunk_overlap=overlap)
@@ -108,7 +118,7 @@ def embed_texts(texts: list[str]) -> tuple[list[list[float]], int]:
     return vectors, tokens
 
 
-def upsert_chunks(chunks: list[dict[str, Any]]) -> tuple[int, int]:
+def upsert_chunks(chunks: list[dict[str, Any]], namespace: str) -> tuple[int, int]:
     """
     Embed and store chunks. Each chunk: {"id": str, "text": str, "metadata": dict (optional)}.
     Stable ids mean re-ingesting the same chunk overwrites it instead of duplicating it.
@@ -127,9 +137,7 @@ def upsert_chunks(chunks: list[dict[str, Any]]) -> tuple[int, int]:
         }
         for c, vector in zip(chunks, vectors)
     ]
-    response = get_index().upsert(
-        vectors=records, namespace=get_settings().namespace, batch_size=BATCH_SIZE, show_progress=False
-    )
+    response = get_index().upsert(vectors=records, namespace=namespace, batch_size=BATCH_SIZE, show_progress=False)
     return response.upserted_count, tokens
 
 
@@ -137,62 +145,102 @@ def _chunk_id_prefix(document_id: str) -> str:
     return f"{document_id}#"
 
 
-def _delete_stale_chunks(document_id: str, keep_ids: set[str]) -> int:
-    """Remove chunks left over from a longer, earlier version of this document."""
+def list_document_ids(document_id: str, namespace: str) -> list[str]:
+    """Every stored chunk id of one document ("<document_id>#<n>")."""
 
     index = get_index()
-    namespace = get_settings().namespace
-    stale = [
-        item.id
-        for page in index.list(prefix=_chunk_id_prefix(document_id), namespace=namespace)
-        for item in page.vectors
-        if item.id not in keep_ids
-    ]
+    return [item.id for page in index.list(prefix=_chunk_id_prefix(document_id), namespace=namespace) for item in page.vectors]
+
+
+def _delete_stale_chunks(document_id: str, keep_ids: set[str], namespace: str) -> int:
+    """Remove chunks left over from a longer, earlier version of this document."""
+
+    stale = [chunk_id for chunk_id in list_document_ids(document_id, namespace) if chunk_id not in keep_ids]
     for start in range(0, len(stale), DELETE_BATCH_SIZE):
-        index.delete(ids=stale[start : start + DELETE_BATCH_SIZE], namespace=namespace)
+        get_index().delete(ids=stale[start : start + DELETE_BATCH_SIZE], namespace=namespace)
     return len(stale)
 
 
+def replace_document(document_id: str, chunks: list[dict[str, Any]], namespace: str) -> tuple[int, int]:
+    """
+    Store a document's prepared chunks, replacing any earlier version: upsert first (so the document is
+    never missing), then delete leftover chunk ids. Returns (chunks indexed, embedding tokens used).
+    """
+
+    indexed, tokens = upsert_chunks(chunks, namespace)
+    _delete_stale_chunks(document_id, keep_ids={c["id"] for c in chunks}, namespace=namespace)
+    return indexed, tokens
+
+
 def ingest_document(
-    document_id: str, text: str, source: str, metadata: dict[str, Any] | None = None
+    document_id: str, text: str, source: str, metadata: dict[str, Any] | None = None, namespace: str | None = None
 ) -> tuple[int, int]:
     """
-    Chunk -> embed -> upsert one document. Re-ingesting the same document_id replaces it:
-    chunk ids are "<document_id>#<chunk_index>", so new chunks overwrite old ones and any
-    extra old chunks are deleted afterwards (upsert first, so the doc is never missing).
+    Generic chunk -> embed -> upsert for /ingest (organization namespace by default).
+    Chunk ids are "<document_id>#<chunk_index>", so re-ingesting the same document_id replaces it.
     Returns (chunks indexed, embedding tokens used).
     """
 
-    pieces = split_text(text)
+    namespace = namespace or get_settings().org_namespace
     chunks = [
         {
             "id": f"{_chunk_id_prefix(document_id)}{i}",
             "text": piece,
             # Caller metadata first, so the required fields can't be overwritten by it.
-            "metadata": {**(metadata or {}), "document_id": document_id, "chunk_index": i, "source": source},
+            "metadata": {**(metadata or {}), "document_id": document_id, "chunk_index": i, "source": source,
+                         "corpus": "internal"},
         }
-        for i, piece in enumerate(pieces)
+        for i, piece in enumerate(split_text(text))
     ]
-    indexed, tokens = upsert_chunks(chunks)
-    _delete_stale_chunks(document_id, keep_ids={c["id"] for c in chunks})
-    return indexed, tokens
+    return replace_document(document_id, chunks, namespace)
 
 
-def query_similar(text: str, top_k: int = 4) -> tuple[list[dict[str, Any]], int]:
-    """Embed the query with the SAME model and return the top_k closest chunks plus tokens used."""
+def fetch_document_chunks(document_id: str, namespace: str) -> list[dict[str, Any]]:
+    """All chunks of one document with their metadata (no embedding call), in chunk order."""
 
+    ids = list_document_ids(document_id, namespace)
+    if not ids:
+        return []
+    fetched = get_index().fetch(ids=ids, namespace=namespace).vectors
+    chunks = [{"id": vid, "text": (v.metadata or {}).get("text", ""), "metadata": v.metadata or {}} for vid, v in fetched.items()]
+    return sorted(chunks, key=lambda c: c["metadata"].get("chunk_index", 0))
+
+
+def embed_query(text: str) -> tuple[list[float], int]:
     vectors, tokens = embed_texts([text])
+    return vectors[0], tokens
+
+
+def query_by_vector(
+    vector: list[float], top_k: int, namespace: str, metadata_filter: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
+    """Top-k closest chunks in one namespace, optionally restricted by a Pinecone metadata filter."""
+
     result = get_index().query(
-        vector=vectors[0],
-        top_k=top_k,
-        namespace=get_settings().namespace,
-        include_metadata=True,
+        vector=vector, top_k=top_k, namespace=namespace, filter=metadata_filter or None, include_metadata=True
     )
-    matches = [
-        {"id": m.id, "score": m.score, "text": (m.metadata or {}).get("text", ""), "metadata": m.metadata or {}}
+    return [
+        {"id": m.id, "score": m.score, "text": (m.metadata or {}).get("text", ""), "metadata": m.metadata or {},
+         "namespace": namespace}
         for m in result.matches
     ]
-    return matches, tokens
+
+
+def query_similar(
+    text: str, top_k: int = 4, namespace: str | None = None, metadata_filter: dict[str, Any] | None = None
+) -> tuple[list[dict[str, Any]], int]:
+    """Embed the query with the SAME model as ingest and return the top_k closest chunks plus tokens used."""
+
+    vector, tokens = embed_query(text)
+    return query_by_vector(vector, top_k, namespace or get_settings().org_namespace, metadata_filter), tokens
+
+
+def delete_namespace(namespace: str) -> None:
+    """Delete every vector in one namespace. Refuses the shared 'default' namespace used by week-1."""
+
+    if namespace in ("", "default", "__default__"):
+        raise ValueError("Refusing to delete the default namespace")
+    get_index().delete(delete_all=True, namespace=namespace)
 
 
 def pinecone_health() -> dict[str, Any]:
@@ -204,18 +252,21 @@ def pinecone_health() -> dict[str, Any]:
     report: dict[str, Any] = {"ok": False, "embedding_model": EMBEDDING_MODEL, "expected_dimension": EMBEDDING_DIM}
     try:
         settings = get_settings()
-        report.update(index=settings.index_name, namespace=settings.namespace)
+        report.update(index=settings.index_name)
 
         start = time.perf_counter()
         stats = get_index().describe_index_stats()
         report["latency_ms"] = int((time.perf_counter() - start) * 1000)
 
-        ns = (stats.namespaces or {}).get(settings.namespace)
+        counts = {name: ns.vector_count for name, ns in (stats.namespaces or {}).items()}
         report.update(
             index_dimension=stats.dimension,
             metric=stats.metric,
             total_vector_count=stats.total_vector_count,
-            namespace_vector_count=ns.vector_count if ns else 0,
+            namespaces={
+                "standards": {"name": settings.standards_namespace, "vector_count": counts.get(settings.standards_namespace, 0)},
+                "organization": {"name": settings.org_namespace, "vector_count": counts.get(settings.org_namespace, 0)},
+            },
         )
         if stats.dimension != EMBEDDING_DIM:
             report["error"] = (

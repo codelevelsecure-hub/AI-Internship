@@ -139,7 +139,7 @@ def debug_retrieve(
         start = time.perf_counter()
         matches, tokens = query_similar(question, top_k=top_k)
         latency_ms = int((time.perf_counter() - start) * 1000)
-        namespace = get_settings().namespace
+        namespace = get_settings().org_namespace
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=f"Vector store not configured: {exc}") from exc
     except Exception as exc:  # OpenAI embedding or Pinecone query failed.

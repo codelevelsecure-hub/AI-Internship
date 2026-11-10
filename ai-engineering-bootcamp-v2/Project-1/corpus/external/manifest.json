@@ -1,0 +1,15 @@
+{
+  "_about": "One entry per external (standard) PDF. Ingestion skips any file not listed here.",
+  "documents": {
+    "NIST.AI.100-1.pdf": {
+      "document_id": "nist-ai-rmf-100-1",
+      "doc_type": "framework",
+      "title": "NIST AI 100-1: AI Risk Management Framework (AI RMF 1.0)"
+    },
+    "AI_RMF_Playbook.pdf": {
+      "document_id": "nist-ai-rmf-playbook",
+      "doc_type": "playbook",
+      "title": "NIST AI RMF Playbook"
+    }
+  }
+}

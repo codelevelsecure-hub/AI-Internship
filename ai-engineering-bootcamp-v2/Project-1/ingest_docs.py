@@ -1,77 +1,105 @@
-"""Send every .md / .txt file in a folder to POST /ingest.
+"""Ingest the corpus into Pinecone, straight from this machine (no API server needed).
 
-Usage (from the week-1 folder, with the API running):
-    python ingest_docs.py                      # docs/ -> http://127.0.0.1:8000
-    python ingest_docs.py --dry-run            # show what would be sent, send nothing
-    python ingest_docs.py --url https://<your-app>.onrender.com
-    python ingest_docs.py path\\to\\other_folder
+    python ingest_docs.py --dry-run              # show files, namespaces and chunk counts; send nothing
+    python ingest_docs.py                        # ingest both corpora
+    python ingest_docs.py --corpus internal      # only the organization's documents
 
-Each file becomes one document:
-    document_id = file name without extension, lowercased, e.g. "Employee Handbook.md" -> "employee-handbook"
-    source      = the file name, e.g. "Employee Handbook.md"
-Re-running replaces those documents in Pinecone (no duplicates), so edit a file and just run it again.
+corpus/external/  -> standards namespace  (NIST PDFs, split by subcategory; see manifest.json)
+corpus/internal/  -> organization namespace (text files, split by heading; see manifest.json)
+The Control Mapping is also stored as one "crosswalk" record per row.
+
+Only files listed in a folder's manifest.json are ingested. Re-running replaces each document's
+chunks (no duplicates), so edit a file and just run it again. Laptop and deployed API read the
+same Pinecone index, so one run serves both.
 """
 
 import argparse
-import re
+import json
 import sys
-import unicodedata
 from pathlib import Path
+from typing import Any
 
-import httpx
+from app.ingestion.control_mapping import CROSSWALK_DOCUMENT_ID, crosswalk_chunks, parse_control_mapping
+from app.ingestion.internal_splitter import split_internal
+from app.ingestion.nist_splitter import SPLITTERS
+from app.retrieval import embedding_cost_usd, get_settings, replace_document
 
-SUPPORTED = {".md", ".txt"}
-DEFAULT_DIR = Path(__file__).resolve().parent / "docs"
+ROOT = Path(__file__).resolve().parent
+EXTERNAL, INTERNAL = ROOT / "corpus" / "external", ROOT / "corpus" / "internal"
+SUPPORTED = {".pdf", ".txt", ".md"}
 
 
-def to_document_id(path: Path) -> str:
-    """ASCII, lowercase, hyphenated — what /ingest accepts as a stable id."""
+def load_manifest(folder: Path) -> dict[str, Any]:
+    path = folder / "manifest.json"
+    if not path.is_file():
+        raise SystemExit(f"Missing {path} — list each file there with its document_id and doc_type.")
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    listed = set(manifest["documents"])
+    present = {p.name for p in folder.iterdir() if p.is_file() and p.suffix.lower() in SUPPORTED}
+    for name in sorted(present - listed):
+        print(f"SKIP  {folder.name}/{name}: not listed in manifest.json")
+    for name in sorted(listed - present):
+        raise SystemExit(f"{folder.name}/manifest.json lists '{name}', but the file is missing.")
+    return manifest
 
-    ascii_name = unicodedata.normalize("NFKD", path.stem).encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9._-]+", "-", ascii_name.lower()).strip("-")[:200] or "document"
+
+def plan_external() -> list[tuple[str, list[dict[str, Any]], str]]:
+    manifest = load_manifest(EXTERNAL)
+    plan = []
+    for name, entry in manifest["documents"].items():
+        splitter = SPLITTERS.get(entry["doc_type"])
+        if splitter is None:
+            raise SystemExit(f"external/{name}: no splitter for doc_type '{entry['doc_type']}'")
+        plan.append((entry["document_id"], splitter(EXTERNAL / name, entry), name))
+    return plan
+
+
+def plan_internal() -> list[tuple[str, list[dict[str, Any]], str]]:
+    manifest = load_manifest(INTERNAL)
+    org = manifest["organization"]
+    plan = []
+    for name, entry in manifest["documents"].items():
+        plan.append((entry["document_id"], split_internal(INTERNAL / name, entry, org), name))
+        if entry["doc_type"] == "control_mapping":
+            records = parse_control_mapping(INTERNAL / name)
+            plan.append((CROSSWALK_DOCUMENT_ID, crosswalk_chunks(records, org, name), f"{name} (crosswalk records)"))
+    return plan
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Ingest a folder of .md/.txt files via POST /ingest.")
-    parser.add_argument("folder", nargs="?", type=Path, default=DEFAULT_DIR)
-    parser.add_argument("--url", default="http://127.0.0.1:8000", help="API base URL")
-    parser.add_argument("--dry-run", action="store_true", help="List files and ids without sending")
+    parser = argparse.ArgumentParser(description="Ingest corpus/external and corpus/internal into Pinecone.")
+    parser.add_argument("--corpus", choices=["all", "external", "internal"], default="all")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be ingested; send nothing")
     args = parser.parse_args()
 
-    if not args.folder.is_dir():
-        print(f"Folder not found: {args.folder}  (create it and put .md/.txt files inside)")
-        return 1
-    files = sorted(p for p in args.folder.iterdir() if p.is_file() and p.suffix.lower() in SUPPORTED)
-    if not files:
-        print(f"No .md or .txt files in {args.folder}")
-        return 1
+    settings = get_settings()
+    jobs = []
+    if args.corpus in ("all", "external"):
+        jobs += [(settings.standards_namespace, *item) for item in plan_external()]
+    if args.corpus in ("all", "internal"):
+        jobs += [(settings.org_namespace, *item) for item in plan_internal()]
 
-    failures = 0
-    for path in files:
-        text = path.read_text(encoding="utf-8", errors="replace")
-        doc_id = to_document_id(path)
-        if not text.strip():
-            print(f"SKIP  {path.name}: file is empty")
-            continue
+    total_chunks = total_tokens = 0
+    for namespace, document_id, chunks, label in jobs:
         if args.dry_run:
-            print(f"DRY   {path.name} -> document_id={doc_id!r} ({len(text):,} chars)")
+            chars = sum(len(c["text"]) for c in chunks)
+            print(f"DRY   {label:<52} -> {namespace} / {document_id}: {len(chunks)} chunks, {chars:,} chars")
+            total_chunks += len(chunks)
             continue
         try:
-            r = httpx.post(
-                f"{args.url.rstrip('/')}/ingest",
-                json={"document_id": doc_id, "source": path.name, "text": text},
-                timeout=300.0,  # Large files mean many embedding calls.
-            )
-        except httpx.HTTPError as exc:
-            print(f"FAIL  {path.name}: could not reach {args.url} ({exc}). Is uvicorn running?")
+            indexed, tokens = replace_document(document_id, chunks, namespace)
+        except Exception as exc:  # OpenAI or Pinecone failure: stop, nothing half-explained
+            print(f"FAIL  {label}: {type(exc).__name__}: {exc}")
             return 1
-        if r.status_code == 200:
-            print(f"OK    {path.name} -> {doc_id!r}: {r.json()['chunks_indexed']} chunks")
-        else:
-            failures += 1
-            print(f"FAIL  {path.name}: HTTP {r.status_code} {r.text[:300]}")
+        total_chunks += indexed
+        total_tokens += tokens
+        print(f"OK    {label:<52} -> {namespace} / {document_id}: {indexed} chunks")
 
-    return 1 if failures else 0
+    if args.dry_run:
+        print(f"\n{total_chunks} chunks would be ingested (nothing sent).")
+    else:
+        print(f"\n{total_chunks} chunks ingested, {total_tokens:,} embedding tokens, ${embedding_cost_usd(total_tokens):.4f}")
+    return 0
 
 
 if __name__ == "__main__":
