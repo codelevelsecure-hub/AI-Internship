@@ -73,7 +73,8 @@ st.title("AI Trust Navigator")
 st.caption("Compares the organization's AI governance documents with the NIST AI RMF 1.0. "
            "Answers come only from the ingested documents.")
 
-ask_tab, evidence_tab, ingest_tab = st.tabs(["Ask", "Evidence explorer", "Ingest a document"])
+ask_tab, gaps_tab, evidence_tab, ingest_tab = st.tabs(["Ask", "Gap analysis", "Evidence explorer", "Ingest a document"])
+STATUS_ICON = {"Covered": "🟢", "Partial": "🟡", "Missing": "🔴", "Not applicable": "⚪"}
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -129,6 +130,64 @@ with ask_tab:
             cols[3].metric("Latency", f"{body['latency_ms']} ms")
             with st.expander("Raw JSON response"):
                 st.code(json.dumps(body, indent=2), language="json")
+
+# ---------------------------------------------------------------- gap analysis
+with gaps_tab:
+    st.caption("Each NIST AI RMF subcategory is assessed against the organization's documents. "
+               "Unchanged subcategories come from the cache at no cost.")
+    run_cols = st.columns([2, 1, 1])
+    scope = run_cols[0].selectbox("Scope", ["All functions", "Govern", "Map", "Measure", "Manage"])
+    refresh = run_cols[1].checkbox("Re-assess (ignore cache)")
+    if run_cols[2].button("Run gap analysis", type="primary"):
+        payload = {"refresh": refresh} | ({} if scope == "All functions" else {"function": scope})
+        with st.spinner("Assessing subcategories (about a minute for all 72 when nothing is cached)..."):
+            status, body = call_api("POST", "/gaps", payload)
+        if status == 200 and isinstance(body, dict):
+            st.session_state.gap_report = body
+        else:
+            show_error(status, body)
+
+    if "gap_report" not in st.session_state:
+        status, body = call_api("GET", "/gaps/latest")
+        st.session_state.gap_report = body if status == 200 and isinstance(body, dict) else None
+
+    report = st.session_state.gap_report
+    if not report:
+        st.info("No gap report yet. Choose a scope and click **Run gap analysis**.")
+    else:
+        st.markdown(f"**{report['scope']}** · model `{report['model']}` · {report['generated_at']} · "
+                    f"cost ${report['cost_usd']:.4f} · {report['cached_findings']} of {len(report['findings'])} from cache")
+        metric_cols = st.columns(4)
+        for col, status_name in zip(metric_cols, STATUS_ICON):
+            col.metric(f"{STATUS_ICON[status_name]} {status_name}", report["counts"].get(status_name, 0))
+        st.dataframe(
+            [{"Function": fn, **counts} for fn, counts in report["counts_by_function"].items()],
+            hide_index=True,
+        )
+
+        shown = st.multiselect("Show status", list(STATUS_ICON), default=["Missing", "Partial"])
+        findings = [f for f in report["findings"] if f["status"] in shown]
+        st.dataframe(
+            [{"Subcategory": f["subcategory_id"], "Status": f"{STATUS_ICON[f['status']]} {f['status']}",
+              "Mapped control": ", ".join(f["mapped_controls"]) or "—", "Evidence docs": len({e["document_id"] for e in f["evidence"]}),
+              "Recommendations": len(f["recommendations"]), "Confidence": round(f["confidence"], 2)} for f in findings],
+            hide_index=True,
+        )
+        for f in findings:
+            with st.expander(f"{STATUS_ICON[f['status']]} {f['subcategory_id']} — {f['statement'][:110]}"):
+                st.markdown(f"**NIST expects** (AI RMF 1.0 p. {f['page']}): {f['statement']}")
+                st.markdown(f"**Assessment:** {f['rationale']}")
+                st.markdown(f"**Control mapping:** {f['mapping_assessment']}")
+                if f["evidence"]:
+                    st.markdown("**Evidence**")
+                    for e in f["evidence"]:
+                        st.markdown(f"- [{e['label']}] *{e['title']} — {e['section']}*: {e['quote'][:220]}")
+                if f["recommendations"]:
+                    st.markdown("**Recommendations**")
+                    for r in f["recommendations"]:
+                        pages = ", ".join(f"p. {p['page']}" for p in r["playbook_refs"] if p.get("page"))
+                        st.markdown(f"- **{r['priority']}** · {r['action']} *(owner: {r['owner_hint']}"
+                                    + (f"; Playbook {pages}" if pages else "") + ")*")
 
 # ---------------------------------------------------------------- evidence
 with evidence_tab:

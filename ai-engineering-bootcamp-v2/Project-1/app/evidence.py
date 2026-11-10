@@ -31,11 +31,45 @@ def _evidence_item(match: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+EVIDENCE_FILTER = {"doc_type": {"$nin": list(MAPPING_DOC_TYPES)}}
+MAX_PER_DOCUMENT = 2  # so one long document can't crowd out the others
+CANDIDATES_PER_SLOT = 3
+
+
+def _diverse_matches(vector: list[float], top_k: int) -> list[dict[str, Any]]:
+    """Best matches with at most MAX_PER_DOCUMENT passages from any one document."""
+
+    candidates = query_by_vector(vector, top_k * CANDIDATES_PER_SLOT, get_settings().org_namespace, EVIDENCE_FILTER)
+    picked: list[dict[str, Any]] = []
+    per_doc: dict[str, int] = {}
+    for m in candidates:
+        doc = m["metadata"].get("document_id", "")
+        if per_doc.get(doc, 0) < MAX_PER_DOCUMENT:
+            picked.append(m)
+            per_doc[doc] = per_doc.get(doc, 0) + 1
+        if len(picked) == top_k:
+            break
+    return picked
+
+
 def _search_evidence(search_text: str, top_k: int) -> tuple[list[dict[str, Any]], int]:
     vector, tokens = embed_query(search_text)
-    matches = query_by_vector(vector, top_k, get_settings().org_namespace,
-                              {"doc_type": {"$nin": list(MAPPING_DOC_TYPES)}})
-    return [_evidence_item(m) for m in matches], tokens
+    return [_evidence_item(m) for m in _diverse_matches(vector, top_k)], tokens
+
+
+def subcategory_search_text(sub: dict[str, Any], control_names: list[str]) -> str:
+    return "\n".join([f"{sub['id']}: {sub['text']}"] + [f"Control: {name}" for name in control_names])
+
+
+def subcategory_evidence_matches(sub: dict[str, Any], control_names: list[str], top_k: int) -> tuple[list[dict[str, Any]], list[float], int]:
+    """Raw evidence matches (full text) plus the search vector, for callers that need more than quotes."""
+
+    vector, tokens = embed_query(subcategory_search_text(sub, control_names))
+    return _diverse_matches(vector, top_k), vector, tokens
+
+
+def evidence_item(match: dict[str, Any]) -> dict[str, Any]:
+    return _evidence_item(match)
 
 
 def evidence_for_subcategory(subcategory_id: str, top_k: int = 5) -> dict[str, Any]:
@@ -44,8 +78,7 @@ def evidence_for_subcategory(subcategory_id: str, top_k: int = 5) -> dict[str, A
     sub = load_framework().subcategory(normalize_id(subcategory_id))
     mapped = crosswalk.controls_for(sub["id"])
     control_names = [m["control_name"] for m in mapped]
-    search_text = "\n".join([f"{sub['id']}: {sub['text']}"] + [f"Control: {name}" for name in control_names])
-    evidence, tokens = _search_evidence(search_text, top_k)
+    evidence, tokens = _search_evidence(subcategory_search_text(sub, control_names), top_k)
     return {
         "subcategory": sub,
         "mapping_status": "mapped" if mapped else "unmapped",

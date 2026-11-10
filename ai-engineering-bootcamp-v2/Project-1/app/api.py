@@ -9,11 +9,11 @@ import time
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from app import crosswalk, qa
+from app import crosswalk, gap_analysis, qa
 from app import evidence as find_evidence
 from app.frameworks import load_framework
 from app.retrieval import EMBEDDING_MODEL, embedding_cost_usd, ingest_document, pinecone_health
-from app.schemas import AskRequest, AskResponse, IngestRequest, IngestResponse
+from app.schemas import AskRequest, AskResponse, GapReport, GapRequest, IngestRequest, IngestResponse
 from app.search import search_both
 
 app = FastAPI(title="AI Trust Navigator")
@@ -163,6 +163,34 @@ def evidence(subcategory: str | None = None, control: str | None = None, top_k: 
         raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
     except Exception as exc:
         raise _service_error(exc, "Evidence lookup") from exc
+
+
+# Example (PowerShell): Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8001/gaps -ContentType "application/json" -Body '{"function": "Govern"}'
+@app.post("/gaps")
+def gaps(body: GapRequest | None = Body(default=None)) -> GapReport:
+    """Assess subcategories (all 72, one function, or a list) against the organization's documents.
+
+    Unchanged subcategories are served from the cache at no token cost; refresh=true re-assesses them.
+    """
+
+    body = body or GapRequest()
+    try:
+        return gap_analysis.run_gap_analysis(function=body.function, subcategory_ids=body.subcategory_ids,
+                                             model=body.model, refresh=body.refresh)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc.args[0])) from exc
+    except Exception as exc:
+        raise _service_error(exc, "Gap analysis") from exc
+
+
+@app.get("/gaps/latest")
+def gaps_latest() -> GapReport:
+    """The most recent gap report (no new model calls). 404 until a report has been run."""
+
+    report = gap_analysis.latest_report()
+    if report is None:
+        raise HTTPException(status_code=404, detail="No gap report yet. Run POST /gaps first.")
+    return report
 
 
 @app.get("/health/pinecone")

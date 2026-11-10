@@ -51,6 +51,89 @@ class AskResponse(BaseModel):
     retrieved_chunk_ids: list[str]  # Every chunk put in the prompt (standards first), best match first.
 
 
+# ---------------------------------------------------------------- gap analysis
+
+GapStatus = Literal["Covered", "Partial", "Missing", "Not applicable"]
+Priority = Literal["High", "Medium", "Low"]
+
+
+class ModelRecommendation(BaseModel):
+    action: str  # One concrete step, written for this organization.
+    priority: Priority
+    owner_hint: str  # Role that should own it, e.g. "AI Governance Committee".
+    playbook_labels: list[str]  # P1, P2, ... — the Suggested Actions it draws on.
+
+
+class GapAssessment(BaseModel):
+    """What the model must return for one subcategory (structured output)."""
+
+    status: GapStatus
+    rationale: str  # Two to four sentences, citing E/P labels in brackets.
+    evidence_labels: list[str]  # E1, E2, ... — organization passages that support the status.
+    mapping_assessment: str  # Whether the mapped control's documented content fits the subcategory.
+    recommendations: list[ModelRecommendation]  # Empty when Covered or Not applicable.
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class EvidenceRef(BaseModel):
+    label: str
+    document_id: str
+    title: str
+    section: str | None = None
+    date: str | None = None
+    chunk_id: str
+    quote: str
+
+
+class PlaybookRef(BaseModel):
+    label: str
+    page: int | None = None
+    chunk_id: str
+
+
+class Recommendation(BaseModel):
+    action: str
+    priority: Priority
+    owner_hint: str
+    playbook_refs: list[PlaybookRef]
+
+
+class GapFinding(BaseModel):
+    subcategory_id: str
+    function: str
+    category_id: str
+    statement: str
+    page: int  # AI RMF 1.0 PDF page of the statement.
+    mapped_controls: list[str]
+    status: GapStatus
+    rationale: str
+    mapping_assessment: str
+    evidence: list[EvidenceRef]
+    recommendations: list[Recommendation]
+    confidence: float
+    cached: bool  # True when served from the cache (no tokens spent).
+    cost_usd: float
+
+
+class GapRequest(BaseModel):
+    function: Literal["Govern", "Map", "Measure", "Manage"] | None = None  # None = all 72 subcategories.
+    subcategory_ids: list[str] | None = None  # Or an explicit list (overrides function).
+    model: str | None = None
+    refresh: bool = False  # True ignores the cache and re-assesses.
+
+
+class GapReport(BaseModel):
+    generated_at: str
+    model: str
+    scope: str
+    counts: dict[str, int]  # By status.
+    counts_by_function: dict[str, dict[str, int]]
+    findings: list[GapFinding]
+    cached_findings: int
+    cost_usd: float
+    latency_ms: int
+
+
 # Pinecone metadata values must be a string, number, boolean, or list of strings (no null/nested objects).
 MetadataValue = str | int | float | bool | list[str]
 
