@@ -1,4 +1,4 @@
-"""Session 2 — grounding prompt for RAG /ask.
+"""Grounding prompt for /ask (rewritten for compliance questions in Phase 2).
 
 Kept in its own file so the prompt is easy to read, review, and iterate on
 without touching endpoint code.

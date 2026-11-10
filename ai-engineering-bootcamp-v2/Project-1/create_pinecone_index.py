@@ -5,12 +5,12 @@ Run once from this folder (after PINECONE_API_KEY and PINECONE_INDEX_NAME are in
 
 Why a script instead of the console form: the SDK's dimension=/metric= arguments create
 an index with a single reserved dense field (`_values`), which is exactly what
-vector_store.py's upsert(values=...) / query(vector=...) calls expect. Safe to re-run.
+app/retrieval.py's upsert(values=...) / query(vector=...) calls expect. Safe to re-run.
 """
 
 from pinecone import Pinecone, ServerlessSpec
 
-from vector_store import EMBEDDING_DIM, EMBEDDING_MODEL, get_settings, pinecone_health
+from app.retrieval import EMBEDDING_DIM, EMBEDDING_MODEL, get_settings, pinecone_health
 
 settings = get_settings()
 pc = Pinecone(api_key=settings.api_key)

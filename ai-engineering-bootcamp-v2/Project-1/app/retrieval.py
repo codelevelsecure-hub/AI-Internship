@@ -1,26 +1,22 @@
-"""Session 2 — Pinecone vector store + OpenAI embeddings.
+"""Pinecone vector store + OpenAI embeddings.
 
-All config comes from environment variables (see .env.example). Nothing here
-talks to Pinecone or OpenAI at import time, so the app still starts if
-Pinecone isn't configured yet; /ask keeps working and /health/pinecone tells
-you what's missing.
+All config comes from environment variables (see .env.example), loaded by the
+app package. Nothing here talks to Pinecone or OpenAI at import time, so the app
+still starts if Pinecone isn't configured yet; /health/pinecone tells you what's
+missing.
 
-Quick check from a terminal:  python vector_store.py
+Quick check from the Project-1 folder:  python -m app.retrieval
 """
 
 import os
 import time
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from openai import OpenAI
 from pinecone import Pinecone
-
-load_dotenv(Path(__file__).resolve().parent / ".env")
 
 # Fixed on purpose (not an env var): ingest and query MUST use the same model,
 # or query vectors land in a different space than the stored ones.
