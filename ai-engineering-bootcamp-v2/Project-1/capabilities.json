@@ -34,6 +34,7 @@
     },
     "errors": {
       "400": "Invalid input (empty question, unknown subcategory in /gaps, both or neither of subcategory/control)",
+      "403": "Adding documents is disabled on this server (/ingest with ALLOW_INGEST=false)",
       "404": "Unknown subcategory or control (/evidence), or no gap report yet (/gaps/latest)",
       "422": "Request body does not match the schema",
       "502": "OpenAI or Pinecone call failed, or the model output failed validation twice",

@@ -4,6 +4,7 @@
 /debug/retrieve shows retrieval alone, /ingest adds an ad-hoc organization document.
 """
 
+import os
 import time
 
 from fastapi import Body, FastAPI, HTTPException, Query
@@ -27,6 +28,12 @@ def _service_error(exc: Exception, action: str) -> HTTPException:
     if isinstance(exc, RuntimeError):
         return HTTPException(status_code=503, detail=f"Service not configured: {exc}")
     return HTTPException(status_code=502, detail=f"{action} failed: {type(exc).__name__}: {exc}")
+
+
+def ingest_enabled() -> bool:
+    """ALLOW_INGEST=false turns off POST /ingest (public demo: visitors can't change the shared documents)."""
+
+    return os.getenv("ALLOW_INGEST", "true").strip().lower() not in {"false", "0", "no", "off"}
 
 
 # Example (PowerShell):
@@ -68,6 +75,8 @@ def ask_simple(body: AskRequest) -> AskResponse:
 def ingest(body: IngestRequest | None = Body(default=None)) -> IngestResponse:
     """Chunk an ad-hoc organization document, embed it, and store it in the organization namespace."""
 
+    if not ingest_enabled():
+        raise HTTPException(status_code=403, detail="Adding documents is disabled on this server (ALLOW_INGEST=false).")
     # Guardrail: reject empty input before spending any tokens.
     if body is None:
         raise HTTPException(status_code=400, detail="Request body is required: {\"text\": ..., \"document_id\": ...}")
@@ -215,5 +224,5 @@ def gaps_latest() -> GapReport:
 def health_pinecone() -> JSONResponse:
     """Debug check: Pinecone reachable, index dimension matches, vectors in both namespaces. 503 if not."""
 
-    report = {**pinecone_health(), "auth_enabled": auth.auth_enabled()}
+    report = {**pinecone_health(), "auth_enabled": auth.auth_enabled(), "ingest_enabled": ingest_enabled()}
     return JSONResponse(report, status_code=200 if report["ok"] else 503)

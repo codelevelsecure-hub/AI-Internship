@@ -28,3 +28,12 @@ def test_key_required_everywhere_except_health_and_docs(monkeypatch):
     health = client.get("/health/pinecone")
     assert health.status_code == 200 and health.json()["auth_enabled"] is True
     assert client.get("/docs").status_code == 200 and client.get("/openapi.json").status_code == 200
+
+
+def test_ingest_can_be_disabled(monkeypatch):
+    _no_pinecone(monkeypatch)
+    monkeypatch.setenv("ALLOW_INGEST", "false")
+    assert client.post("/ingest", json={"document_id": "x", "text": "y"}).status_code == 403
+    assert client.get("/health/pinecone").json()["ingest_enabled"] is False
+    monkeypatch.delenv("ALLOW_INGEST")
+    assert client.post("/ingest", json={"document_id": "x", "text": " "}).status_code == 400  # enabled by default

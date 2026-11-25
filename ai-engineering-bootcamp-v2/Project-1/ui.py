@@ -7,6 +7,9 @@ Run (from this folder, with the API running):
     streamlit run ui.py --server.port 8502
 Point it at another server (PowerShell):
     $env:ATN_API_URL = "https://<your-service>.onrender.com"; streamlit run ui.py
+
+Hosted (public demo): set ATN_API_URL and ATN_API_KEY on the UI server. The key then stays on the
+server (never sent to the browser) and the API URL is locked, so visitors can't redirect the key.
 """
 
 import json
@@ -16,6 +19,7 @@ import httpx
 import streamlit as st
 
 DEFAULT_API_URL = os.getenv("ATN_API_URL", "http://127.0.0.1:8001")
+SERVER_API_KEY = os.getenv("ATN_API_KEY", "").strip()  # Set -> hosted mode: key and URL fixed by the server.
 TIMEOUT_S = 180.0  # Render's free plan can take ~60s to wake; gap runs take longer.
 
 st.set_page_config(page_title="AI Trust Navigator", layout="wide")
@@ -56,9 +60,14 @@ def show_citations(title: str, citations: list[dict]) -> None:
 # ---------------------------------------------------------------- sidebar
 with st.sidebar:
     st.header("API")
-    st.session_state.api_url = st.text_input("API base URL", DEFAULT_API_URL, help="Set ATN_API_URL to change the default.")
-    st.session_state.api_key = st.text_input("API key", os.getenv("ATN_API_KEY", ""), type="password",
-                                             help="Sent as X-API-Key. Needed when the API has API_KEY set. Set ATN_API_KEY to prefill.")
+    if SERVER_API_KEY:
+        st.session_state.api_url = DEFAULT_API_URL
+        st.session_state.api_key = SERVER_API_KEY
+        st.caption(f"Connected to `{DEFAULT_API_URL}`. The API key is configured on the server.")
+    else:
+        st.session_state.api_url = st.text_input("API base URL", DEFAULT_API_URL, help="Set ATN_API_URL to change the default.")
+        st.session_state.api_key = st.text_input("API key", "", type="password",
+                                                 help="Sent as X-API-Key. Needed when the API has API_KEY set.")
     if st.button("Check connection"):
         with st.spinner("Calling /health/pinecone (first call may wake the server)..."):
             status, body = call_api("GET", "/health/pinecone")

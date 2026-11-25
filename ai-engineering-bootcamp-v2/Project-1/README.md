@@ -147,7 +147,8 @@ Open http://localhost:8502 → **Check connection**. Tabs: **Ask**, **Gap analys
 **Evidence explorer**, **Ingest a document**. API docs: http://127.0.0.1:8001/docs.
 
 If `API_KEY` is set on the server, every route except `/health/pinecone` and the docs needs the
-header `X-API-Key: <key>`. In the UI, enter it in the sidebar or set `$env:ATN_API_KEY` first.
+header `X-API-Key: <key>`. In the UI, enter it in the sidebar, or set `$env:ATN_API_KEY` first (the
+key then stays server-side and the API URL is fixed to `ATN_API_URL`, as on the hosted UI).
 
 ## Example requests (PowerShell)
 
@@ -195,24 +196,30 @@ forces it).
 | `PINECONE_NAMESPACE_STANDARDS` | no | `project-1-standards` | NIST chunks |
 | `PINECONE_NAMESPACE_ORG` | no | `project-1-org-default` | Organization chunks + crosswalk |
 | `API_KEY` | on a server | (open) | Required `X-API-Key` value |
+| `ALLOW_INGEST` | no | `true` | `false` turns off `POST /ingest` (public demo) |
 | `ROUTER_MODEL` | no | `gpt-4o` | Agent for `/ask` |
 | `GAP_MODEL` | no | `gpt-4o-mini` | Gap analysis |
 
-## Deploy to Render
+## Deploy to Render (public demo: API + UI)
 
-Create a **new** Web Service from this repository (don't change any existing service):
+Create two **new** Web Services from this repository (don't change any existing service). Both use
+Branch `ai-trust-navigator` (or `main` once merged), Root Directory `ai-engineering-bootcamp-v2/Project-1`,
+Build Command `pip install -r requirements.txt` and `PYTHON_VERSION=3.13.7` (tested; 3.14 also works).
 
-| Setting | Value |
-|---|---|
-| Root Directory | `ai-engineering-bootcamp-v2/Project-1` |
-| Build Command | `pip install -r requirements.txt` |
-| Start Command | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
-| Environment | `OPENAI_API_KEY`, `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, `PINECONE_NAMESPACE_STANDARDS`, `PINECONE_NAMESPACE_ORG`, **`API_KEY`**, `PYTHON_VERSION=3.13.7` (tested; 3.14 also works) |
+| Service | Start Command | Environment |
+|---|---|---|
+| API | `uvicorn main:app --host 0.0.0.0 --port $PORT` | `OPENAI_API_KEY`, `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, `PINECONE_NAMESPACE_STANDARDS`, `PINECONE_NAMESPACE_ORG`, **`API_KEY`**, `ALLOW_INGEST=false` |
+| UI | `streamlit run ui.py --server.port $PORT --server.address 0.0.0.0` | `ATN_API_URL=https://<api>.onrender.com`, `ATN_API_KEY` = the API's `API_KEY` |
+
+Share the UI link. Visitors never see the key: the UI keeps it on the server and its API URL is
+locked. `ALLOW_INGEST=false` stops visitors changing the shared documents (the Ingest tab then
+returns 403). Set a monthly spending limit on the OpenAI account.
 
 The server reads the corpus from Pinecone, so ingest from your machine (above), not on Render.
-Check `https://<service>.onrender.com/health/pinecone`: `ok: true`, both namespaces populated,
-`auth_enabled: true`. Render's free disk is temporary, so the gap cache starts empty after each
-deploy or restart; the first `/gaps` run rebuilds it (~$0.03).
+Check `https://<api>.onrender.com/health/pinecone`: `ok: true`, both namespaces populated,
+`auth_enabled: true`, `ingest_enabled: false`. Render's free disk is temporary, so the gap cache
+starts empty after each deploy or restart; the first `/gaps` run rebuilds it (~$0.03). Free
+services sleep after 15 minutes idle; the first visit can take about a minute.
 
 ## Project layout
 

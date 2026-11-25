@@ -1,0 +1,6 @@
+# Streamlit settings (read from this folder). headless: no browser launch or prompts on a server.
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
