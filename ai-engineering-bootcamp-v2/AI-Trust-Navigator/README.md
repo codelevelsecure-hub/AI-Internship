@@ -203,7 +203,7 @@ forces it).
 ## Deploy to Render (public demo: API + UI)
 
 Create two **new** Web Services from this repository (don't change any existing service). Both use
-Branch `ai-trust-navigator` (or `main` once merged), Root Directory `ai-engineering-bootcamp-v2/Project-1`,
+Branch `ai-trust-navigator` (or `main` once merged), Root Directory `ai-engineering-bootcamp-v2/AI-Trust-Navigator`,
 Build Command `pip install -r requirements.txt` and `PYTHON_VERSION=3.13.7` (tested; 3.14 also works).
 
 | Service | Start Command | Environment |

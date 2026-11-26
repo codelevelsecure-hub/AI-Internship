@@ -8,7 +8,7 @@ All config comes from environment variables (see .env.example), loaded by the ap
 here talks to Pinecone or OpenAI at import time, so the app still starts if Pinecone isn't configured
 yet; /health/pinecone tells you what's missing.
 
-Quick check from the Project-1 folder:  python -m app.retrieval
+Quick check from the AI-Trust-Navigator folder:  python -m app.retrieval
 """
 
 import os

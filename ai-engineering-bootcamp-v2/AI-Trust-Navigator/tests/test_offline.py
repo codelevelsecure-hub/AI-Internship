@@ -1,4 +1,4 @@
-"""Offline tests for /ask: no OpenAI or Pinecone calls. Run from the Project-1 folder with `pytest`."""
+"""Offline tests for /ask: no OpenAI or Pinecone calls. Run from the AI-Trust-Navigator folder with `pytest`."""
 
 import pytest
 from fastapi.testclient import TestClient

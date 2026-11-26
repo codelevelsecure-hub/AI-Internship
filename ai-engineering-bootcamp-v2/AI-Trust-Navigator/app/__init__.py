@@ -1,6 +1,6 @@
 """AI Trust Navigator v1 — application package.
 
-Loads Project-1/.env once, when the package is first imported, so every module
+Loads AI-Trust-Navigator/.env once, when the package is first imported, so every module
 sees the same settings regardless of the shell's working directory.
 """
 
